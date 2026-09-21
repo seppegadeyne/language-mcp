@@ -32,8 +32,8 @@ npm test        # node:test via tsx
 ```yaml
 mcp_servers:
   nl_taal:
-    command: /home/seppe/.hermes/node/bin/node
-    args: [/home/seppe/Projects/nl-taal-mcp/dist/cli.js]
+    command: node
+    args: [/absoluut/pad/naar/nl-taal-mcp/dist/cli.js]
     connect_timeout: 60
     enabled: true
     timeout: 120

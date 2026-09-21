@@ -33,11 +33,11 @@ describe('hunspell wrapper', () => {
 describe('tokenizer', () => {
   it('extracts words and skips punctuation, numbers, URLs, emails', () => {
     const t = extractWords(
-      'Beste mevrouw, mijn naam is Seppe (https://example.com, seppe@example.be). Ik heb 15 jaar ervaring.'
+      'Beste mevrouw, mijn naam is Jan (https://example.com, jan@example.com). Ik heb 15 jaar ervaring.'
     );
     const words = t.map((x) => x.clean);
     assert.ok(words.includes('Beste'));
-    assert.ok(words.includes('Seppe'));
+    assert.ok(words.includes('Jan'));
     assert.ok(!words.some((w) => w.includes('@')));
     assert.ok(!words.some((w) => /^https/.test(w)));
     assert.ok(!words.some((w) => /^\d/.test(w)));
