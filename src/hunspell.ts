@@ -21,7 +21,7 @@ export interface HunspellResult {
   suggestions: string[];
 }
 
-export async function hunspellWords(words: string[]): Promise<Map<string, HunspellResult>> {
+export async function hunspellWords(words: string[], lang: 'nl' | 'en_US' = 'nl'): Promise<Map<string, HunspellResult>> {
   const results = new Map<string, HunspellResult>();
   if (words.length === 0) return results;
 
@@ -29,7 +29,7 @@ export async function hunspellWords(words: string[]): Promise<Map<string, Hunspe
   const input = unique.join('\n') + '\n';
 
   return await new Promise<Map<string, HunspellResult>>((resolve, reject) => {
-    const proc = spawn('hunspell', ['-d', resolveDict(), '-a'], {
+    const proc = spawn('hunspell', ['-d', resolveDict(lang), '-a'], {
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     let out = '';
@@ -96,15 +96,15 @@ export async function hunspellWords(words: string[]): Promise<Map<string, Hunspe
   });
 }
 
-function resolveDict(): string {
+function resolveDict(lang: 'nl' | 'en_US'): string {
   const candidates = [
-    path.join(__dirname, '..', 'assets', 'nl'),
-    path.join(process.cwd(), 'assets', 'nl'),
-    '/usr/share/hunspell/nl_NL',
-    'nl_NL',
+    path.join(__dirname, '..', 'assets', lang),
+    path.join(process.cwd(), 'assets', lang),
   ];
+  if (lang === 'nl') candidates.push('/usr/share/hunspell/nl_NL', 'nl_NL');
+  else candidates.push('/usr/share/hunspell/en_US', 'en_US');
   for (const c of candidates) {
     if (fs.existsSync(c + '.dic')) return c;
   }
-  return 'nl_NL';
+  return lang;
 }

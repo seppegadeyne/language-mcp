@@ -4,11 +4,12 @@ import { z } from 'zod';
 import { hunspellWords } from './hunspell.js';
 import { MolexClient } from './molex.js';
 import { extractWords } from './tokenize.js';
+import { findBritticisms } from './britticisms.js';
 
 const molex = new MolexClient();
 
 const server = new McpServer(
-  { name: 'nl-taal', version: '0.1.0' },
+  { name: 'nl-taal', version: '0.2.0' },
   { capabilities: { tools: {} } }
 );
 
@@ -18,6 +19,68 @@ const READ_ONLY = {
   idempotentHint: true,
   openWorldHint: true,
 } as const;
+
+/**
+ * check_us_english_text: spell-check + britticism scan for US English text.
+ */
+server.tool(
+  'check_us_english_text',
+  'Check English text for US English compliance: typos (hunspell en_US) + British spellings/vocabulary (colour, whilst, towards, bespoke, webshop, sole trader...) with US replacements. Use for EN pages, blogs, US-facing copy.',
+  {
+    text: z.string().describe('The English text to check'),
+  },
+  async ({ text }) => {
+    const tokens = extractWords(text);
+    const words = tokens.map((t) => t.clean);
+    const results = await hunspellWords(words, 'en_US');
+
+    const seen = new Map<string, { suggestions: string[]; count: number; first_index: number }>();
+    for (let i = 0; i < tokens.length; i++) {
+      const r = results.get(tokens[i].clean);
+      if (r && !r.correct) {
+        const entry =
+          seen.get(tokens[i].clean) ?? {
+            suggestions: r.suggestions,
+            count: 0,
+            first_index: text.indexOf(tokens[i].word),
+          };
+        entry.count++;
+        seen.set(tokens[i].clean, entry);
+      }
+    }
+    const flagged = [...seen.entries()]
+      .map(([word, e]) => ({ word, ...e }))
+      .sort((a, b) => b.count - a.count || a.word.localeCompare(b.word));
+
+    const britts = findBritticisms(text);
+    const britishWords = new Set(britts.map((b) => b.matched.toLowerCase()));
+
+    const lines: string[] = [
+      `US English check (hunspell en_US + britticism scan)`,
+      `${tokens.length} words checked, ${flagged.length} unknown, ${britts.length} British forms.`,
+    ];
+    if (britts.length > 0) {
+      lines.push('British spellings/vocabulary to replace:');
+      for (const b of britts) {
+        const note = b.note ? ` — ${b.note}` : '';
+        lines.push(`- "${b.matched}" → "${b.american}" (position ${b.index})${note}`);
+      }
+    }
+    const unknownOnly = flagged.filter((f) => !britishWords.has(f.word.toLowerCase()));
+    if (unknownOnly.length > 0) {
+      lines.push('Unknown words (typos or proper nouns):');
+      for (const f of unknownOnly) {
+        const sug = f.suggestions.length ? f.suggestions.join(', ') : '(none)';
+        const cnt = f.count > 1 ? ` [${f.count}x]` : '';
+        lines.push(`- ${f.word}${cnt} → ${sug} (position ${f.first_index})`);
+      }
+    }
+    if (britts.length === 0 && flagged.length === 0) {
+      lines.push('OK: no typos, no British forms found.');
+    }
+    return { content: [{ type: 'text', text: lines.join('\n') }] };
+  }
+);
 
 /**
  * check_dutch_text: spell-check a Dutch text and return flagged words with
@@ -126,6 +189,36 @@ server.tool(
         isError: true,
       };
     }
+  }
+);
+
+/**
+ * validate_us_word: quick local yes/no + suggestions for one English word.
+ */
+server.tool(
+  'validate_us_word',
+  'Check quickly (lokaal) of één Engels woord correct gespeld is volgens US English, met suggesties. Detecteert ook Britse spelling voor losse woorden.',
+  {
+    word: z.string().describe('Single English word'),
+  },
+  async ({ word }) => {
+    const clean = word.trim();
+    const britts = findBritticisms(clean);
+    const results = await hunspellWords([clean], 'en_US');
+    const r = results.get(clean);
+    const parts: string[] = [];
+    if (britts.length > 0) {
+      parts.push(`"${clean}" is British English: gebruik "${britts[0].american}".`);
+    }
+    if (r && !r.correct && britts.length === 0) {
+      const sug = r.suggestions.length ? r.suggestions.join(', ') : '(geen suggesties)';
+      return { content: [{ type: 'text', text: `"${clean}" is NIET correct in US English. Suggesties: ${sug}` }] };
+    }
+    if (!r) {
+      return { content: [{ type: 'text', text: `Kon "${clean}" niet controleren.` }], isError: true };
+    }
+    if (parts.length) return { content: [{ type: 'text', text: parts.join(' ') }] };
+    return { content: [{ type: 'text', text: `"${clean}" is correct US English.` }] };
   }
 );
 
