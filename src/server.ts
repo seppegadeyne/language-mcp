@@ -9,7 +9,7 @@ import { findBritticisms } from './britticisms.js';
 const molex = new MolexClient();
 
 const server = new McpServer(
-  { name: 'nl-taal', version: '0.2.0' },
+  { name: 'language-mcp', version: '0.2.1' },
   { capabilities: { tools: {} } }
 );
 

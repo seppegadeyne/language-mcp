@@ -1,4 +1,4 @@
-# nl-taal-mcp
+# language-mcp
 
 Lokale MCP-server voor Nederlandse én US-English taalcontrole, te gebruiken door AI-agents (Hermes, Claude, e.a.) die teksten schrijven: cv's, sollicitatiebrieven, blogartikelen, website-copy.
 
@@ -33,9 +33,9 @@ npm test        # node:test via tsx
 
 ```yaml
 mcp_servers:
-  nl_taal:
+  language:
     command: node
-    args: [/absoluut/pad/naar/nl-taal-mcp/dist/cli.js]
+    args: [/absoluut/pad/naar/language-mcp/dist/cli.js]
     connect_timeout: 60
     enabled: true
     timeout: 120
