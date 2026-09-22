@@ -7,12 +7,16 @@ import fs from 'node:fs';
  *
  * Protocol notes (verified against hunspell 1.7.3):
  * - First output line is a banner starting with `@(#)`.
- * - Each input word yields exactly ONE non-empty response line:
+ * - Each input word yields a BLOCK of one or more non-empty response lines,
+ *   always terminated by one empty separator line:
  *     `*`                       correct (word not repeated)
  *     `+ <stem>`                correct via affix stemming
  *     `# <word>`                unknown, no suggestions
  *     `& <word> <n> <off>: <suggestions>`  unknown with suggestions
- * - Empty separator lines appear between responses and must be dropped.
+ * - Words containing hyphens, em dashes or similar separators are checked per
+ *   part and produce one response line per part ("data-driven" → two `*` lines).
+ *   Blocks MUST be split on the empty separator lines; zipping single response
+ *   lines 1:1 with input words breaks on the first compound word.
  */
 
 export interface HunspellResult {
@@ -50,44 +54,54 @@ export async function hunspellWords(words: string[], lang: 'nl' | 'en_US' = 'nl'
         reject(new Error(`hunspell exited with ${code}`));
         return;
       }
-      const lines = out
+      const rawLines = out
         .split('\n')
         .map((l) => l.replace(/\r$/, ''))
-        .filter((l) => l.length > 0 && !l.startsWith('@(#)'));
+        .filter((l) => !l.startsWith('@(#)'));
 
-      // Zip: k-th non-empty response belongs to k-th input word.
-      if (lines.length !== unique.length) {
+      // Group into per-word blocks separated by empty lines: a compound word
+      // (hyphen, em dash, ...) yields one response line per part, so a plain
+      // 1:1 line zip misaligns on the first compound.
+      const blocks: string[][] = [];
+      let current: string[] = [];
+      for (const line of rawLines) {
+        if (line.length === 0) {
+          if (current.length > 0) {
+            blocks.push(current);
+            current = [];
+          }
+        } else {
+          current.push(line);
+        }
+      }
+      if (current.length > 0) blocks.push(current);
+
+      // Zip: k-th response block belongs to k-th input word.
+      if (blocks.length !== unique.length) {
         reject(
           new Error(
-            `hunspell response count mismatch: ${lines.length} responses for ${unique.length} words`
+            `hunspell response count mismatch: ${blocks.length} blocks for ${unique.length} words`
           )
         );
         return;
       }
       for (let i = 0; i < unique.length; i++) {
         const word = unique[i];
-        const line = lines[i];
-        if (line.startsWith('*') || line.startsWith('+')) {
-          results.set(word, { word, correct: true, suggestions: [] });
-        } else if (line.startsWith('#')) {
-          results.set(word, { word, correct: false, suggestions: [] });
-        } else if (line.startsWith('&')) {
-          const m = line.match(/^& (\S+) (\d+) \d+: (.*)$/);
-          if (m && m[1] === word) {
-            results.set(word, {
-              word,
-              correct: false,
-              suggestions: m[3].split(', ').filter(Boolean).slice(0, 8),
-            });
-          } else {
-            // Fall back to positional trust: word from input, suggestions from line.
-            results.set(word, {
-              word,
-              correct: false,
-              suggestions: (m?.[3] ?? '').split(', ').filter(Boolean).slice(0, 8),
-            });
+        const block = blocks[i];
+        const suggestions: string[] = [];
+        let correct = true;
+        for (const line of block) {
+          if (line.startsWith('*') || line.startsWith('+')) continue;
+          correct = false;
+          if (line.startsWith('&')) {
+            const m = line.match(/^& (\S+) (\d+) \d+: (.*)$/);
+            for (const s of (m?.[3] ?? '').split(', ')) {
+              if (s && !suggestions.includes(s)) suggestions.push(s);
+            }
           }
+          // '#'-lines: unknown without suggestions, nothing to collect.
         }
+        results.set(word, { word, correct, suggestions: suggestions.slice(0, 8) });
       }
       resolve(results);
     });

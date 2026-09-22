@@ -23,6 +23,22 @@ describe('hunspell en_US wrapper', () => {
     assert.equal(r.get('recieve')?.correct, false);
     assert.equal(r.get('seperate')?.correct, false);
   });
+
+  it('handles hyphenated compounds without response-block misalignment', async () => {
+    // hunspell -a returns one response line per hyphen-separated part, so a
+    // plain 1:1 line zip used to throw "response count mismatch" here.
+    const r = await hunspellWords(
+      ['data-driven', 'non-overlapping', 'long-tail', 'foobared-bazqux', 'guesswork'],
+      'en_US'
+    );
+    assert.equal(r.size, 5);
+    assert.equal(r.get('data-driven')?.correct, true);
+    assert.equal(r.get('non-overlapping')?.correct, true);
+    assert.equal(r.get('long-tail')?.correct, true);
+    assert.equal(r.get('foobared-bazqux')?.correct, false);
+    assert.ok((r.get('foobared-bazqux')?.suggestions.length ?? 0) > 0);
+    assert.equal(r.get('guesswork')?.correct, true);
+  });
 });
 
 describe('britticism detector', () => {
