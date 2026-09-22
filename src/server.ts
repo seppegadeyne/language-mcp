@@ -9,7 +9,7 @@ import { findBritticisms } from './britticisms.js';
 const molex = new MolexClient();
 
 const server = new McpServer(
-  { name: 'language-mcp', version: '0.2.1' },
+  { name: 'language-mcp', version: '0.3.0' },
   { capabilities: { tools: {} } }
 );
 
@@ -143,10 +143,10 @@ server.tool(
 );
 
 /**
- * dutch_word_details: rich lemma info from woordenlijst.org (network).
+ * get_dutch_word_details: rich lemma info from woordenlijst.org (network).
  */
 server.tool(
-  'dutch_word_details',
+  'get_dutch_word_details',
   'Get official Dutch word details from woordenlijst.org: lemma, woordsoort, uitspraak, syllabisering/afbreking, verkleinwoord, paradigm. Slower (network); use for individual important words, not bulk.',
   {
     word: z.string().describe('Dutch word or wordform to look up'),
@@ -193,10 +193,10 @@ server.tool(
 );
 
 /**
- * validate_us_word: quick local yes/no + suggestions for one English word.
+ * validate_us_english_word: quick local yes/no + suggestions for one English word.
  */
 server.tool(
-  'validate_us_word',
+  'validate_us_english_word',
   'Check quickly (lokaal) of één Engels woord correct gespeld is volgens US English, met suggesties. Detecteert ook Britse spelling voor losse woorden.',
   {
     word: z.string().describe('Single English word'),
