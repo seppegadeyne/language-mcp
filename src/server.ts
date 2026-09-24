@@ -125,17 +125,17 @@ server.tool(
     const totalWords = tokens.length;
     const uniqueFlagged = flagged.length;
     const lines: string[] = [
-      `Dutch spell check (OpenTaal woordenlijst, lokaal)`,
-      `${totalWords} woorden gecontroleerd, ${uniqueFlagged} twijfelwoorden.`,
+      `Dutch spell check (OpenTaal dictionary, local)`,
+      `${totalWords} words checked, ${uniqueFlagged} unknown words.`,
     ];
     if (flagged.length === 0) {
-      lines.push('OK: geen onbekende woorden gevonden.');
+      lines.push('OK: no unknown words found.');
     } else {
-      lines.push('Mogelijk foutieve woorden (suggestions = dichtstbijzijnde correcties):');
+      lines.push('Potential spelling errors (suggestions = closest corrections):');
       for (const f of flagged) {
-        const sug = f.suggestions.length ? f.suggestions.join(', ') : '(geen)';
+        const sug = f.suggestions.length ? f.suggestions.join(', ') : '(none)';
         const cnt = f.count > 1 ? ` [${f.count}x]` : '';
-        lines.push(`- ${f.word}${cnt} → ${sug} (positie ${f.first_index})`);
+        lines.push(`- ${f.word}${cnt} → ${sug} (position ${f.first_index})`);
       }
     }
     return { content: [{ type: 'text', text: lines.join('\n') }] };
@@ -147,7 +147,7 @@ server.tool(
  */
 server.tool(
   'get_dutch_word_details',
-  'Get official Dutch word details from woordenlijst.org: lemma, woordsoort, uitspraak, syllabisering/afbreking, verkleinwoord, paradigm. Slower (network); use for individual important words, not bulk.',
+  'Get official Dutch word details from woordenlijst.org: lemma, part of speech, pronunciation, syllabification/hyphenation, diminutive forms, paradigm. Slower (network); use for individual important words, not bulk.',
   {
     word: z.string().describe('Dutch word or wordform to look up'),
   },
@@ -159,17 +159,17 @@ server.tool(
           content: [
             {
               type: 'text',
-              text: `Geen lemma gevonden voor "${word}" op woordenlijst.org.`,
+              text: `No lemma found for "${word}" on woordenlijst.org.`,
             },
           ],
         };
       }
       const lines: string[] = [
         `${d.lemma} — ${d.label || d.partOfSpeech}`,
-        `Uitspraak: ${d.pronunciation || '-'}`,
-        `Afbreking: ${d.hyphenation || '-'}`,
-        `Taalvariant: ${d.taalvariant || '-'}`,
-        `Keurmerk: ${d.keurmerk ? 'ja' : 'nee'}`,
+        `Pronunciation: ${d.pronunciation || '-'}`,
+        `Hyphenation: ${d.hyphenation || '-'}`,
+        `Language variant: ${d.taalvariant || '-'}`,
+        `Quality mark: ${d.keurmerk ? 'yes' : 'no'}`,
       ];
       if (d.paradigm.length > 0) {
         lines.push('Paradigm:');
@@ -183,7 +183,7 @@ server.tool(
         content: [
           {
             type: 'text',
-            text: `woordenlijst.org niet bereikbaar (${(e as Error).message}). Val terug op check_dutch_text.`,
+            text: `woordenlijst.org is unavailable (${(e as Error).message}). Fall back to check_dutch_text.`,
           },
         ],
         isError: true,
@@ -197,7 +197,7 @@ server.tool(
  */
 server.tool(
   'validate_us_english_word',
-  'Check quickly (lokaal) of één Engels woord correct gespeld is volgens US English, met suggesties. Detecteert ook Britse spelling voor losse woorden.',
+  'Quickly check a single word locally for correct US English spelling, with suggestions. Also detect British spelling.',
   {
     word: z.string().describe('Single English word'),
   },
@@ -208,14 +208,14 @@ server.tool(
     const r = results.get(clean);
     const parts: string[] = [];
     if (britts.length > 0) {
-      parts.push(`"${clean}" is British English: gebruik "${britts[0].american}".`);
+      parts.push(`"${clean}" is British English: use "${britts[0].american}".`);
     }
     if (r && !r.correct && britts.length === 0) {
-      const sug = r.suggestions.length ? r.suggestions.join(', ') : '(geen suggesties)';
-      return { content: [{ type: 'text', text: `"${clean}" is NIET correct in US English. Suggesties: ${sug}` }] };
+      const sug = r.suggestions.length ? r.suggestions.join(', ') : '(no suggestions)';
+      return { content: [{ type: 'text', text: `"${clean}" is NOT correct in US English. Suggestions: ${sug}` }] };
     }
     if (!r) {
-      return { content: [{ type: 'text', text: `Kon "${clean}" niet controleren.` }], isError: true };
+      return { content: [{ type: 'text', text: `Could not check "${clean}".` }], isError: true };
     }
     if (parts.length) return { content: [{ type: 'text', text: parts.join(' ') }] };
     return { content: [{ type: 'text', text: `"${clean}" is correct US English.` }] };
@@ -227,7 +227,7 @@ server.tool(
  */
 server.tool(
   'validate_dutch_word',
-  'Check quickly (lokaal) of één Nederlands woord correct gespeld is, met suggesties bij foute spelling.',
+  'Quickly check a single Dutch word locally for correct spelling, with suggestions for spelling errors.',
   {
     word: z.string().describe('Single Dutch word'),
   },
@@ -236,13 +236,13 @@ server.tool(
     const results = await hunspellWords([clean]);
     const r = results.get(clean);
     if (!r) {
-      return { content: [{ type: 'text', text: `Kon "${clean}" niet controleren.` }], isError: true };
+      return { content: [{ type: 'text', text: `Could not check "${clean}".` }], isError: true };
     }
     if (r.correct) {
-      return { content: [{ type: 'text', text: `"${clean}" is correct gespeld.` }] };
+      return { content: [{ type: 'text', text: `"${clean}" is spelled correctly.` }] };
     }
-    const sug = r.suggestions.length ? r.suggestions.join(', ') : '(geen suggesties)';
-    return { content: [{ type: 'text', text: `"${clean}" is NIET correct. Suggesties: ${sug}` }] };
+    const sug = r.suggestions.length ? r.suggestions.join(', ') : '(no suggestions)';
+    return { content: [{ type: 'text', text: `"${clean}" is NOT correct. Suggestions: ${sug}` }] };
   }
 );
 

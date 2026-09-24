@@ -18,7 +18,7 @@ describe('hunspell en_US wrapper', () => {
     }
   });
 
-  it('accepts real typos detection', async () => {
+  it('detects actual typos', async () => {
     const r = await hunspellWords(['recieve', 'seperate'], 'en_US');
     assert.equal(r.get('recieve')?.correct, false);
     assert.equal(r.get('seperate')?.correct, false);

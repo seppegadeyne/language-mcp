@@ -18,7 +18,7 @@ describe('hunspell wrapper', () => {
     assert.equal(r.get('apenapen')?.correct, false);
   });
 
-  it('handles flexies (inflections) via stemming', async () => {
+  it('handles inflections via stemming', async () => {
     const r = await hunspellWords(['pizzaatjes', 'hardloopsters']);
     assert.equal(r.get('pizzaatjes')?.correct, true);
     assert.equal(r.get('hardloopsters')?.correct, true);

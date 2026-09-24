@@ -10,7 +10,7 @@ import { DOMParser } from '@xmldom/xmldom';
 export interface WordDetails {
   lemma: string;
   lemmaId: string;
-  label: string; // e.g. "zelfstandig naamwoord (m/v)"
+  label: string; // Upstream Dutch part-of-speech label, preserved as returned.
   pronunciation: string;
   hyphenation: string; // e.g. "piz|za"
   entryType: string;

@@ -6,7 +6,7 @@
  * This layer flags British spellings, vocabulary and constructions that a
  * US English content guideline forbids, with the US replacement.
  *
- * Sources: SCOWL/hunspell behaviour + the Straffe Sites US English contract
+ * Sources: SCOWL/hunspell behavior + the Straffe Sites US English contract
  * (tests/english-us-content-contract.test.mjs categories).
  */
 

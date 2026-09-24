@@ -1,49 +1,50 @@
-# ADR 001 — Spellchecking: C-hunspell binary in plaats van pure-JS (nspell)
+# ADR 001 — Spell checking: C hunspell binary instead of pure JavaScript (nspell)
 
-Status: Besloten (2026-09-22)
+Status: Accepted (2026-09-22)
 
-## Achtergrond
+## Background
 
-De MCP-server roept de `hunspell` C-binary aan via de `-a` (ispell) pipe
-(`src/hunspell.ts`) voor de NL- en en_US-spellingchecks. Een alternatief zou
-zijn om over te stappen op een pure-JS implementatie (bijv. `nspell@2.x`) zodat
-de server geen externe binary vereist en ook op een minimale/containers/remote
-omgeving draait.
+The MCP server invokes the `hunspell` C binary through the `-a` (ispell) pipe
+(`src/hunspell.ts`) for Dutch and US English spelling checks. An alternative
+would be a pure JavaScript implementation (for example, `nspell@2.x`), removing
+the external binary requirement so the server could run in minimal environments,
+containers, or remote environments without that binary.
 
-## Besluit
+## Decision
 
-We houden de C-hunspell binary en gaan **niet** over op nspell.
+Keep the C hunspell binary. Do **not** switch to nspell.
 
-## Redenering
+## Rationale
 
-- **Pariteitsrisico bij compound/gesepareerde woorden.** De huidige wrapper
-  leunt op de `-a`-pipe die hyphen-woorden, em-dashes en vergelijkbare
-  scheidings tekens per deel controleert (één responsregel per deel). nspell
-  heeft geen equivalent van die pipe: die splitting- en samenvoeglogic zou
-  zelf nagebouwd moeten worden. Fout doen levert false-positives op hyphen-
-  woorden ("data-driven", "real-time") op — een direct kwaliteitsverlies op
-  precies het niveau dat de server goed moet doen.
-- **Prestaties.** De C-binary is per woord sneller en wordt in één
-  batch-spawn aangeroepen. nspell is per woord in-process JS; verwaarloosbaar
-  voor blog-tekst/e-mail, maar meetbaar bij langere documenten.
-- **Suggestiegedrag.** Zelfde dictionary en algoritme, maar de exacte
-  rangvolgorde en het aantal teruggegeven suggesties kan licht afwijken.
-  De huidige code kapt op 8; bij een switch zou de set/pariteit moeten
-  worden geverifieerd.
-- **Wat nícht verandert.** `britticisms.ts` is een statische lijst, geen
-  hunspell-afhankelijk, dus de US/UK-detector blijft identiek bij beide
-  opties. Het verschil zit dus puur in de kern-spelling en compound-afhandeling.
-- **Afweging.** Het enige concrete voordeel van nspell is het wegvallen van
-  de binary-afhankelijkheid op targets die die niet hebben. Maar de kosten
-  (na-bouwen van compound-splitting, pariteits- en performance-testen, risico
-  op false-positives) wegen zwaarder dan het voordeel, terwijl een omgeving
-  zónder hunspell op Aorus geen actueel use-case is.
+- **Parity risks for compound words and words with separators.** The current
+  wrapper relies on the `-a` pipe to check each part of words containing
+  hyphens, em dashes, or similar separators, with one response line per part.
+  nspell has no equivalent pipe: we would have to implement the splitting and
+  result aggregation ourselves. Mistakes would cause false positives for
+  hyphenated words ("data-driven", "real-time"), directly reducing quality in
+  an area the server must handle well.
+- **Performance.** The C binary is faster per word and is invoked once per
+  batch. nspell runs JavaScript in the same process for each word; the
+  difference is negligible for blog posts and email but measurable for longer
+  documents.
+- **Suggestion behavior.** The dictionary and algorithm are the same, but the
+  exact order and number of suggestions may differ slightly. The current code
+  limits suggestions to eight; a switch would require checking suggestion
+  parity.
+- **What does not change.** `britticisms.ts` contains static rules and does not
+  depend on hunspell. US/UK detection remains identical with either option.
+  The difference lies only in core spelling checks and compound handling.
+- **Trade-off.** The only concrete benefit of nspell is removing the binary
+  dependency on targets that lack it. The costs (implementing compound
+  splitting, parity and performance tests, and the risk of false positives)
+  outweigh that benefit. Running without hunspell on Aorus is not a current
+  use case.
 
-## Consequenties
+## Consequences
 
-- `hunspell` blijft een vereiste runtime (PATH of systeemlocatie) en remains
-  zo; documentatie en installatie blijven dat benoemen.
-- Mochten we in de toekomst toch naar een target zonder C-hunspell moeten
-  draaien (bijv. een volledig gesloten hosting-omgeving), dan opnieuw
-  evalueren op basis van een A/B-pariteitest (dezelfde woordlijst: correct/
-  suggest + top-8 vergelijken), niet op aannames.
+- `hunspell` remains a runtime requirement (on PATH or in a system location).
+  Documentation and installation instructions must continue to state this.
+- If a future target cannot run C hunspell (for example, a fully restricted
+  hosting environment), reevaluate using an A/B parity test with the same
+  word list: compare correctness and suggestions, including the top eight.
+  Do not rely on assumptions.
