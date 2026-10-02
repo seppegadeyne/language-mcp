@@ -27,6 +27,17 @@ describe('prose', () => {
     assert.ok(stripped.includes('uitleg'));
   });
 
+  it('strips bare domain names length-preserving', () => {
+    const text = 'Boek via Verhuurwinkel.nl en betaal vooraf.';
+    const stripped = stripNonProse(text);
+    assert.equal(stripped.length, text.length);
+    assert.ok(!stripped.includes('Verhuurwinkel'));
+    assert.ok(stripped.includes('betaal'));
+    // Offsets after the domain must still point into the original text.
+    const idx = stripped.indexOf('betaal');
+    assert.equal(text.slice(idx, idx + 'betaal'.length), 'betaal');
+  });
+
   it('protects abbreviation dots from splitting sentences', () => {
     const p = protectAbbreviations('Bijv. zo. En o.a. dit. Verder!');
     assert.ok(!p.includes('Bijv..'));

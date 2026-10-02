@@ -53,6 +53,9 @@ export function stripNonProse(text: string): string {
   t = t.replace(/`[^`\n]*`/g, blanks);
   t = t.replace(/\b(?:https?:\/\/|www\.)\S+/gi, blanks);
   t = t.replace(/\b[\w.+-]+@[\w-]+\.[\w.-]+\b/gi, blanks);
+  // Bare domain names without a protocol (Verhuurwinkel.nl), optionally with
+  // a path; length-preserving like the other strips.
+  t = t.replace(/\b[\w-]+\.(?:nl|com|be|eu|org|net|info|biz)(?:\/\S*)?/gi, blanks);
   return t;
 }
 

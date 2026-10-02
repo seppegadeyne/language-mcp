@@ -43,6 +43,16 @@ describe('tokenizer', () => {
     assert.ok(!words.some((w) => /^\d/.test(w)));
   });
 
+  it('skips bare domain names like Verhuurwinkel.nl', () => {
+    const t = extractWords('Je reserveert via Verhuurwinkel.nl of example.com/beamers vandaag.');
+    const words = t.map((x) => x.clean);
+    assert.ok(!words.includes('nl'));
+    assert.ok(!words.includes('com'));
+    assert.ok(!words.some((w) => w.includes('Verhuurwinkel')));
+    assert.ok(words.includes('reserveert'));
+    assert.ok(words.includes('vandaag'));
+  });
+
   it('keeps hyphenated and apostrophe words', () => {
     const t = extractWords("de 's morgens-gedachte en een koloniale stijl: co-creatie");
     const words = t.map((x) => x.clean);

@@ -11,9 +11,12 @@ export interface Token {
 
 const URL_RE = /\b(?:https?:\/\/|www\.)\S+/gi;
 const EMAIL_RE = /\b[\w.+-]+@[\w-]+\.[\w.-]+\b/gi;
+// Bare domain names without a protocol (Verhuurwinkel.nl, example.com/beamers)
+// so their TLD is not flagged as an unknown word.
+const BARE_DOMAIN_RE = /\b[\w-]+\.(?:nl|com|be|eu|org|net|info|biz)(?:\/\S*)?/gi;
 
 export function extractWords(text: string, maxWords = 2000): Token[] {
-  let t = text.replace(URL_RE, ' ').replace(EMAIL_RE, ' ');
+  let t = text.replace(URL_RE, ' ').replace(EMAIL_RE, ' ').replace(BARE_DOMAIN_RE, ' ');
 
   // Protect code blocks and inline code from markdown-ish input.
   t = t.replace(/```[\s\S]*?```/g, ' ').replace(/`[^`\n]*`/g, ' ');
