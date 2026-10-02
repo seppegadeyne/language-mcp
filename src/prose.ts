@@ -90,7 +90,8 @@ export function protectAbbreviations(text: string, lang: ProseLang = 'nl'): stri
   // Single capital initials: "J. Jansen" — letter + dot + space + capital.
   t = t.replace(/(^|[\s(\u00a0[])([A-Z])\.(?=\s+[A-Z])/g, (_m, p1: string, p2: string) => `${p1}${p2}${DOT}`);
   // Ordinals and decimals: "3.5", "art. 5"? keep art.; decimals:
-  t = t.replace(/(\d)\.(\d)/g, `$1${DOT}$2`);
+  // Lookahead, not a consumed digit: "0.5.0" has two dots between digits.
+  t = t.replace(/(\d)\.(?=\d)/g, `$1${DOT}`);
   return t;
 }
 

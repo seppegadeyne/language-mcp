@@ -67,6 +67,11 @@ describe('prose', () => {
     assert.equal(text.slice(sentences[0].start, sentences[0].end).trim(), 'Dit is een lange zin die over\ntwee regels loopt.');
   });
 
+  it('keeps multi-dot version numbers inside one sentence', () => {
+    const sents = splitSentences(protectAbbreviations('Versie 0.5.0 is uit. Klaar.'));
+    assert.equal(sents.length, 2);
+  });
+
   it('protects every capital initial, not only the first', () => {
     const sents = splitSentences(protectAbbreviations('Met J. Jansen en P. Peeters gesproken. Klaar.'));
     assert.equal(sents.length, 2);
