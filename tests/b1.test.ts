@@ -46,6 +46,32 @@ describe('prose', () => {
     assert.equal(sents.length, 3);
   });
 
+  it('escapes dots inside multi-dot abbreviations', () => {
+    // Unescaped, the "i.v.m" pattern also matched "ixvym." and hid a real
+    // sentence end.
+    const sents = splitSentences(protectAbbreviations('Dit is ixvym. Dat is twee.'));
+    assert.equal(sents.length, 2);
+    const kept = splitSentences(protectAbbreviations('Dit gebeurt i.v.m. de regels. Klaar.'));
+    assert.equal(kept.length, 2);
+  });
+
+  it('treats a soft line wrap as part of the sentence, not a boundary', () => {
+    const text = 'Dit is een lange zin die over\ntwee regels loopt. Tweede zin.\n\nKop zonder punt\nNieuwe alinea hier.';
+    const { sentences, paragraphs } = analyzeProse(text);
+    assert.deepEqual(
+      sentences.map((s) => s.words.length),
+      [10, 2, 3, 3]
+    );
+    assert.equal(paragraphs.length, 3);
+    // Offsets still point into the original text.
+    assert.equal(text.slice(sentences[0].start, sentences[0].end).trim(), 'Dit is een lange zin die over\ntwee regels loopt.');
+  });
+
+  it('protects every capital initial, not only the first', () => {
+    const sents = splitSentences(protectAbbreviations('Met J. Jansen en P. Peeters gesproken. Klaar.'));
+    assert.equal(sents.length, 2);
+  });
+
   it('splits sentences and keeps offsets into the original text', () => {
     const text = 'Dit is zin één. Dit is zin twee!';
     const { sentences } = analyzeProse(text);

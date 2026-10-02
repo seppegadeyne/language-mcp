@@ -42,6 +42,30 @@ Guidelines for AI agents (Hermes, etc.) working in this repository.
   tool parameters because sector conventions differ; do not hard-code new
   limits inside the modules.
 
+## US English B1 layer (since v0.5.0)
+
+- `check_us_english_b1_text` mirrors the Dutch tool: Flesch Reading Ease,
+  Flesch-Kincaid grade, ARI, sentence/paragraph length (defaults 20/25
+  words: plainlanguage.gov and GOV.UK), passive voice, jargon, wordy
+  phrases, hidden verbs, filler, idioms, nominalization density, and "you"
+  address. Same positioning: proxies, not a validated B1 verdict.
+- Shared prose pipeline: `analyzeProse(text, 'en' | 'nl')` and
+  `computeReadability(..., lang)` take a language; defaults stay Dutch.
+  Per-language abbreviation lists live in `src/prose.ts`.
+- `src/syllables-en.ts` is calibrated against the CMU Pronouncing
+  Dictionary (~94% exact on the 10,000 most common words). Re-measure
+  against cmudict before changing its rules; anchored cases are in
+  `tests/b1-en.test.ts`.
+- English passive detection (`src/passive-en.ts`): en_US `-m` output has
+  no ts: tags; regular -ed forms carry `fl:D`, irregular participles are
+  bare lemmas, so they come from a closed list. `hunspellMorph` skips
+  hyphenated words because the en_US dictionary splits them into one
+  block per part.
+- British spellings belong in `src/britticisms.ts`, not in the English
+  B1 rules (no double reporting).
+- Token and rule positions are offsets into the original text; never look
+  them up with `text.indexOf(word)` (it matches inside other words).
+
 ## Development practices
 
 - TypeScript, Node 18+. Tests: `npx tsx --test tests/*.test.ts` (node:test + assert).

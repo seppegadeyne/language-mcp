@@ -6,14 +6,16 @@ import { MolexClient } from './molex.js';
 import { extractWords } from './tokenize.js';
 import { findBritticisms } from './britticisms.js';
 import { analyzeProse, wordTokens } from './prose.js';
-import { computeReadability, fleschDoumaBand } from './readability.js';
+import { computeReadability, fleschDoumaBand, fleschReadingEaseBand } from './readability.js';
 import { findB1Hits, findNominalizations, analyzeVoice } from './b1rules.js';
+import { findB1HitsEn, findNominalizationsEn, analyzeAddressEn } from './b1rules-en.js';
 import { detectPassives } from './passive.js';
+import { detectPassivesEn } from './passive-en.js';
 
 const molex = new MolexClient();
 
 const server = new McpServer(
-  { name: 'language-mcp', version: '0.4.0' },
+  { name: 'language-mcp', version: '0.5.0' },
   { capabilities: { tools: {} } }
 );
 
@@ -46,7 +48,7 @@ server.tool(
           seen.get(tokens[i].clean) ?? {
             suggestions: r.suggestions,
             count: 0,
-            first_index: text.indexOf(tokens[i].word),
+            first_index: tokens[i].index,
           };
         entry.count++;
         seen.set(tokens[i].clean, entry);
@@ -115,7 +117,7 @@ server.tool(
         const entry = seen.get(tokens[i].clean) ?? {
           suggestions: r.suggestions,
           count: 0,
-          first_index: text.indexOf(tokens[i].word),
+          first_index: tokens[i].index,
         };
         entry.count++;
         seen.set(tokens[i].clean, entry);
@@ -165,13 +167,13 @@ server.tool(
   },
   async ({ text, context, max_sentence_words, warn_sentence_words, max_para_words, flesch_douma_min, voice = 'je' }) => {
     try {
-      const { sentences, paragraphs } = analyzeProse(text);
+      const { sentences, paragraphs } = analyzeProse(text, 'nl');
       const paraWordCounts = paragraphs.map((p) => wordTokens(p.text).length);
       const stats = computeReadability(sentences, paraWordCounts, {
         maxSentenceWords: max_sentence_words,
         warnSentenceWords: warn_sentence_words,
         maxParaWords: max_para_words,
-      });
+      }, 'nl');
       const b1hits = findB1Hits(text);
       const voiceReport = analyzeVoice(text, voice);
       const nomReport = findNominalizations(text, stats.wordCount);
@@ -191,7 +193,7 @@ server.tool(
       if (stats.fleschDouma !== null) {
         lines.push(`- Flesch-Douma: ${stats.fleschDouma} (band: ${band}; B1 target ${fdMin}-70)`);
       } else {
-        lines.push(`- Flesch-Douma: n/a (sample below ${50} words / fewer than 3 sentences; formulas unstable on short samples)`);
+        lines.push(`- Flesch-Douma: n/a (sample below 50 words / fewer than 3 sentences; formulas unstable on short samples)`);
       }
       if (stats.ari !== null) lines.push(`- ARI: ${stats.ari} (grade-level indication)`);
       const warnAt = warn_sentence_words ?? 15;
@@ -264,16 +266,145 @@ server.tool(
   }
 );
 
+/**
+ * check_us_english_b1_text: deterministic plain-language (B1) proxies for
+ * US English text. Same structure and output shape as check_dutch_b1_text.
+ */
+server.tool(
+  'check_us_english_b1_text',
+  'Check US English text for B1-level plain-language proxies: readability (Flesch Reading Ease, Flesch-Kincaid grade, ARI), sentence and paragraph length, passive voice (hunspell morphology + irregular participles), formal jargon and wordy phrases with plain replacements, hidden verbs (make a decision -> decide), filler words, idioms, nominalization density, and direct "you" address. These are deterministic proxies, not a validated B1 verdict. Local (hunspell en_US); no network. Use together with check_us_english_text (spelling and British forms) for complete language review.',
+  {
+    text: z.string().describe('The English text to check'),
+    context: z.string().optional().describe('Optional label, e.g. "pricing page"'),
+    max_sentence_words: z.number().int().positive().optional().describe('Flag sentences above this many words (default 25, the GOV.UK limit)'),
+    warn_sentence_words: z.number().int().positive().optional().describe('Warn from this many words per sentence (default 20, the plainlanguage.gov average)'),
+    max_para_words: z.number().int().positive().optional().describe('Flag paragraphs above this many words (default 150)'),
+    flesch_min: z.number().optional().describe('Minimum Flesch Reading Ease for the B1 band (default 60)'),
+    max_grade: z.number().optional().describe('Maximum Flesch-Kincaid grade level (default 9)'),
+    address: z.enum(['you', 'any']).optional().describe('Expected reader address: "you" (default) reports third-person references to the reader; "any" only counts them'),
+  },
+  async ({ text, context, max_sentence_words, warn_sentence_words, max_para_words, flesch_min, max_grade, address = 'you' }) => {
+    try {
+      const { sentences, paragraphs } = analyzeProse(text, 'en');
+      const paraWordCounts = paragraphs.map((p) => wordTokens(p.text).length);
+      const stats = computeReadability(sentences, paraWordCounts, {
+        maxSentenceWords: max_sentence_words,
+        warnSentenceWords: warn_sentence_words,
+        maxParaWords: max_para_words,
+      }, 'en');
+      const hits = findB1HitsEn(text);
+      const addressReport = analyzeAddressEn(text, address);
+      const nomReport = findNominalizationsEn(text, stats.wordCount);
+      const passives = await detectPassivesEn(sentences);
+
+      const freMin = flesch_min ?? 60;
+      const gradeMax = max_grade ?? 9;
+      const warnAt = warn_sentence_words ?? 20;
+      const flagAt = max_sentence_words ?? 25;
+      const byCat = (c: string) => hits.filter((h) => h.category === c);
+
+      const lines: string[] = [];
+      lines.push(`US English B1 plain-language check (B1 proxies, not a validated B1 verdict)`);
+      if (context) lines.push(`Context: ${context}`);
+      lines.push('');
+      lines.push(`Readability:`);
+      if (stats.fleschReadingEase !== null && stats.fleschKincaidGrade !== null) {
+        const band = fleschReadingEaseBand(stats.fleschReadingEase, freMin);
+        lines.push(`- Flesch Reading Ease: ${stats.fleschReadingEase} (band: ${band}; B1 target ${freMin}-70)`);
+        const gradeNote = stats.fleschKincaidGrade > gradeMax ? ` (above target ${gradeMax})` : ` (target ${gradeMax} or lower)`;
+        lines.push(`- Flesch-Kincaid grade: ${stats.fleschKincaidGrade}${gradeNote}`);
+      } else {
+        lines.push(`- Flesch Reading Ease / Flesch-Kincaid: n/a (sample below 50 words / fewer than 3 sentences; formulas unstable on short samples)`);
+      }
+      if (stats.ari !== null) lines.push(`- ARI: ${stats.ari} (grade-level indication)`);
+      lines.push(`- Words: ${stats.wordCount}, sentences: ${stats.sentenceCount}, avg ${stats.avgSentenceLength} words/sentence`);
+      lines.push(`- Sentences over ${warnAt} words: ${stats.longSentences + stats.veryLongSentences} (${stats.veryLongSentences} over ${flagAt})`);
+      const longest = sentences
+        .filter((s) => s.words.length > flagAt)
+        .sort((a, b) => b.words.length - a.words.length)
+        .slice(0, 5);
+      for (const s of longest) {
+        lines.push(`  - ${s.words.length} words: "${truncate(s.text, 90)}" (position ${s.start})`);
+      }
+      lines.push(`- Complex words (>=${stats.longWordSyllables} syllables): ${Math.round(stats.longWordShare * 100)}%`);
+      lines.push(`- Paragraphs: ${stats.paraCount} (${stats.longParas} over ${max_para_words ?? 150} words)`);
+
+      lines.push('');
+      lines.push(`Passive voice (review flags, not verdicts):`);
+      if (passives.length === 0) {
+        lines.push(`- None detected.`);
+      } else {
+        for (const p of passives.slice(0, 15)) {
+          const conf = p.confidence === 'low' ? ' [adjectival use likely, low confidence]' : '';
+          const by = p.withBy ? ` (+ by agent)` : '';
+          const kind = p.kind === 'get-passive' ? ' [get-passive]' : '';
+          lines.push(`- "${p.aux} ${p.participle}"${by}${kind}${conf} — "${truncate(p.sentenceText, 90)}" (position ${p.index})`);
+        }
+        if (passives.length > 15) lines.push(`- ...and ${passives.length - 15} more`);
+      }
+
+      lines.push('');
+      lines.push(`Jargon and buzzwords (plain alternatives):`);
+      const jargon = byCat('jargon');
+      if (jargon.length === 0) {
+        lines.push(`- None found.`);
+      } else {
+        for (const h of jargon.slice(0, 20)) {
+          lines.push(`- "${h.matched}" → ${h.plain} (position ${h.index})${h.note ? ` — ${h.note}` : ''}`);
+        }
+        if (jargon.length > 20) lines.push(`- ...and ${jargon.length - 20} more`);
+      }
+
+      const wordy = byCat('wordy');
+      if (wordy.length > 0) plainLines(lines, wordy, 'Wordy phrases:');
+      const hidden = byCat('hidden-verb');
+      if (hidden.length > 0) plainLines(lines, hidden, 'Hidden verbs (use the verb, not the noun):');
+      const fillers = byCat('filler');
+      if (fillers.length > 0) plainLines(lines, fillers, 'Filler words:');
+      const idioms = byCat('idiom');
+      if (idioms.length > 0) plainLines(lines, idioms, 'Idioms and metaphors (consider plain phrasing for second-language readers):');
+
+      lines.push('');
+      lines.push(`Nominalization density: ${nomReport.per100} per 100 words${nomReport.per100 > 6 ? ' (high — prefer verbs over nouns)' : ''}`);
+      if (nomReport.top.length > 0) {
+        lines.push(`  Top: ${nomReport.top.map((t) => `${t.word} (${t.count}x)`).join(', ')}`);
+      }
+
+      lines.push('');
+      const refs = addressReport.readerTop.map((r) => `${r.word} (${r.count}x)`).join(', ');
+      if (address === 'you' && addressReport.readerRefs > 0) {
+        lines.push(`Reader address: third-person references to the reader ${addressReport.readerRefs}x (first at position ${addressReport.readerFirstIndex}): ${refs} — address the reader as "you" where they are the audience; "you" used ${addressReport.youCount}x.`);
+      } else if (address === 'you' && addressReport.youCount === 0 && stats.wordCount >= 50) {
+        lines.push(`Reader address: no "you" found — plain-language guidelines recommend addressing the reader directly.`);
+      } else {
+        lines.push(`Reader address: OK ("you" ${addressReport.youCount}x, third-person reader references ${addressReport.readerRefs}x${refs ? `: ${refs}` : ''}).`);
+      }
+
+      return { content: [{ type: 'text', text: lines.join('\n') }] };
+    } catch (e) {
+      return {
+        content: [{ type: 'text', text: `B1 check failed: ${(e as Error).message}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
 function truncate(s: string, n: number): string {
   return s.length > n ? s.slice(0, n - 1) + '…' : s;
 }
 
-function plainLines(lines: string[], hits: Array<{ index: number; matched: string; plain: string }>, header: string): void {
+function plainLines(
+  lines: string[],
+  hits: Array<{ index: number; matched: string; plain: string; note?: string }>,
+  header: string
+): void {
   lines.push('');
   lines.push(header);
   for (const h of hits.slice(0, 10)) {
-    lines.push(`- "${h.matched}" → ${h.plain} (position ${h.index})`);
+    lines.push(`- "${h.matched}" → ${h.plain} (position ${h.index})${h.note ? ` — ${h.note}` : ''}`);
   }
+  if (hits.length > 10) lines.push(`- ...and ${hits.length - 10} more`);
 }
 
 /**

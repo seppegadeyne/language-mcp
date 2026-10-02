@@ -110,7 +110,8 @@ export async function hunspellWords(words: string[], lang: 'nl' | 'en_US' = 'nl'
   });
 }
 
-function resolveDict(lang: 'nl' | 'en_US'): string {
+/** Bundled asset path first, system dictionaries as fallbacks (ADR 001). */
+export function resolveDict(lang: 'nl' | 'en_US'): string {
   const candidates = [
     path.join(__dirname, '..', 'assets', lang),
     path.join(process.cwd(), 'assets', lang),

@@ -21,8 +21,7 @@
  */
 
 import { spawn } from 'node:child_process';
-import path from 'node:path';
-import fs from 'node:fs';
+import { resolveDict } from './hunspell.js';
 import { countSyllables } from './syllables.js';
 import type { Sentence } from './prose.js';
 
@@ -41,38 +40,31 @@ const ZIJN_AUX = new Set(['is', 'zijn', 'ben', 'bent', 'was', 'waren']);
 const WORD_WINDOW = 5;
 const ZIJN_WINDOW = 3;
 
-function resolveDict(): string {
-  const candidates = [
-    path.join(__dirname, '..', 'assets', 'nl'),
-    path.join(process.cwd(), 'assets', 'nl'),
-    '/usr/share/hunspell/nl_NL',
-    'nl_NL',
-  ];
-  for (const c of candidates) {
-    if (fs.existsSync(c + '.dic')) return c;
-  }
-  return 'nl';
-}
-
 /**
  * Morphological analysis for unique words via one `hunspell -m` batch.
- * Returns a map word -> info: ts: tags plus whether hunspell echoed the
- * word as its own stem (bare lemma, e.g. "gemaakt  st:gemaakt").
+ * Returns a map word -> info: ts: tags, fl: affix flags, all st: stems, and
+ * whether hunspell echoed the word as its own stem (bare lemma, e.g.
+ * "gemaakt  st:gemaakt").
+ *
+ * Words that hunspell splits on BREAK characters (en_US splits
+ * "data-driven" into one block per part) would break the block count, so
+ * callers must pass hyphen-free words; such words are skipped here.
  */
 export interface MorphInfo {
   tags: Set<string>;
+  flags: Set<string>; // fl: affix flags (en_US: D = regular -ed form)
   ownSt: boolean;
   stems: string[]; // all st: stems in the analysis block
 }
 
-export async function hunspellMorph(words: string[]): Promise<Map<string, MorphInfo>> {
+export async function hunspellMorph(words: string[], lang: 'nl' | 'en_US' = 'nl'): Promise<Map<string, MorphInfo>> {
   const result = new Map<string, MorphInfo>();
-  if (words.length === 0) return result;
-  const unique = [...new Set(words)];
+  const unique = [...new Set(words.filter((w) => w.length > 0 && !/[-\s]/.test(w)))];
+  if (unique.length === 0) return result;
   const input = unique.join('\n') + '\n';
 
   return await new Promise<Map<string, MorphInfo>>((resolve, reject) => {
-    const proc = spawn('hunspell', ['-d', resolveDict(), '-m'], {
+    const proc = spawn('hunspell', ['-d', resolveDict(lang), '-m'], {
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     let out = '';
@@ -122,12 +114,17 @@ export async function hunspellMorph(words: string[]): Promise<Map<string, MorphI
       for (let i = 0; i < unique.length; i++) {
         const word = unique[i];
         const tags = new Set<string>();
+        const flags = new Set<string>();
         const stems: string[] = [];
         let ownSt = false;
         for (const line of blocks[i]) {
           const found = line.match(/ts:(\w+)/g);
           if (found) {
             for (const tag of found) tags.add(tag.slice(3));
+          }
+          const fl = line.match(/fl:(\w+)/g);
+          if (fl) {
+            for (const f of fl) flags.add(f.slice(3));
           }
           const stemMatches = line.match(/st:([^\s]+)/g);
           if (stemMatches) {
@@ -138,7 +135,7 @@ export async function hunspellMorph(words: string[]): Promise<Map<string, MorphI
             ownSt = true;
           }
         }
-        result.set(word, { tags, ownSt, stems });
+        result.set(word, { tags, flags, ownSt, stems });
       }
       resolve(result);
     });

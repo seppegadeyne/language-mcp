@@ -53,6 +53,26 @@ describe('tokenizer', () => {
     assert.ok(words.includes('vandaag'));
   });
 
+  it('reports each token at its own offset, not the first substring match', () => {
+    // indexOf('red') would point inside "hundred"; offsets must be exact.
+    const text = 'A hundred red cars, and the red one.';
+    const reds = extractWords(text).filter((t) => t.clean === 'red');
+    assert.equal(reds.length, 2);
+    for (const r of reds) assert.equal(text.slice(r.index, r.index + 3), 'red');
+    assert.notEqual(reds[0].index, text.indexOf('red'));
+  });
+
+  it('keeps offsets valid after stripped URLs and domains', () => {
+    const text = 'Zie https://example.com/x en Verhuurwinkel.nl voor pizze.';
+    const tok = extractWords(text).find((t) => t.clean === 'pizze')!;
+    assert.equal(text.slice(tok.index, tok.index + 5), 'pizze');
+  });
+
+  it('does not treat "word.common" as a domain name', () => {
+    const words = extractWords('This is uncommon.common sense').map((t) => t.clean);
+    assert.ok(words.includes('common'));
+  });
+
   it('keeps hyphenated and apostrophe words', () => {
     const t = extractWords("de 's morgens-gedachte en een koloniale stijl: co-creatie");
     const words = t.map((x) => x.clean);
