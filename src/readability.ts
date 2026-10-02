@@ -48,7 +48,12 @@ export function computeReadability(
   paraWordCounts: number[],
   opts: ReadabilityThresholds = {}
 ): ReadabilityStats {
-  const t = { ...DEFAULTS, ...opts };
+  // Drop explicitly-undefined options: spreading { key: undefined } over the
+  // defaults would clobber them (callers pass through optional tool params).
+  const defined = Object.fromEntries(
+    Object.entries(opts).filter(([, v]) => v !== undefined)
+  ) as ReadabilityThresholds;
+  const t = { ...DEFAULTS, ...defined };
   const wordCount = sentences.reduce((n, s) => n + s.words.length, 0);
   const sentenceCount = sentences.length;
   const syllables = sentences.reduce(

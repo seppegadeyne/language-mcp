@@ -194,8 +194,10 @@ server.tool(
         lines.push(`- Flesch-Douma: n/a (sample below ${50} words / fewer than 3 sentences; formulas unstable on short samples)`);
       }
       if (stats.ari !== null) lines.push(`- ARI: ${stats.ari} (grade-level indication)`);
+      const warnAt = warn_sentence_words ?? 15;
+      const flagAt = max_sentence_words ?? 20;
       lines.push(`- Words: ${stats.wordCount}, sentences: ${stats.sentenceCount}, avg ${stats.avgSentenceLength} words/sentence`);
-      lines.push(`- Sentences >${stats.longSentences > 0 ? warn_sentence_words ?? 15 : 15} words: ${stats.longSentences + stats.veryLongSentences} (${stats.veryLongSentences} over ${max_sentence_words ?? 20})`);
+      lines.push(`- Sentences over ${warnAt} words: ${stats.longSentences + stats.veryLongSentences} (${stats.veryLongSentences} over ${flagAt})`);
       lines.push(`- Long words (>=4 syllables): ${Math.round(stats.longWordShare * 100)}%`);
       lines.push(`- Paragraphs: ${stats.paraCount} (${stats.longParas} over ${max_para_words ?? 150} words)`);
 

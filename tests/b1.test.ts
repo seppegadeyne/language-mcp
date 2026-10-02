@@ -95,6 +95,19 @@ describe('readability', () => {
     const stats2 = computeReadability(sentences, [200], { maxParaWords: 150 });
     assert.equal(stats2.longParas, 1);
   });
+
+  it('keeps default thresholds when optional options are explicitly undefined', () => {
+    const text = 'De implementatie van de regeling betreffende de vergoeding wordt vervolgens door de afdeling uitgevoerd, wat betekent dat u als klant langer moet wachten op een beslissing dan u wellicht zou verwachten op basis van de eerder door ons gedane toezeggingen.';
+    const { sentences } = analyzeProse(text);
+    const stats = computeReadability(sentences, [40], {
+      maxSentenceWords: undefined,
+      warnSentenceWords: undefined,
+      maxParaWords: undefined,
+    });
+    // Defaults: warn >15, flag >20. The 38-word sentence must be flagged.
+    assert.equal(stats.veryLongSentences, 1);
+    assert.equal(stats.longSentences + stats.veryLongSentences, 1);
+  });
 });
 
 describe('b1 rules', () => {
