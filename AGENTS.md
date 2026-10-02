@@ -26,6 +26,22 @@ Guidelines for AI agents (Hermes, etc.) working in this repository.
   (for example, `dutch_word_details` is obsolete and has been renamed).
 - Use consistent language identifiers: `dutch` and `us_english`.
 
+## B1 simplicity layer (since v0.4.0)
+
+- `check_dutch_b1_text` reports deterministic B1 proxies (readability
+  Flesch-Douma/ARI, sentence and paragraph length, passive voice, officialese
+  jargon, filler, idioms, nominalization density, je/u voice consistency),
+  NOT a validated B1 verdict. Keep that positioning in descriptions.
+- Passive detection runs a separate `hunspell -m` batch (`src/passive.ts`):
+  the `-a` ispell pipe returns no morphology. OpenTaal's nl.aff uses `ts:`/
+  `st:` fields (not `is:` fields), bare participles get no `ts:VBpe` tag
+  (only affix-derived forms do), and separable compounds analyze as compound
+  stems (`uitgevoerd` → `uit st:gevoerd`). Protocol notes are in
+  `src/passive.ts` comments.
+- Thresholds (sentence/paragraph length, Flesch-Douma minimum, voice) are
+  tool parameters because sector conventions differ; do not hard-code new
+  limits inside the modules.
+
 ## Development practices
 
 - TypeScript, Node 18+. Tests: `npx tsx --test tests/*.test.ts` (node:test + assert).
