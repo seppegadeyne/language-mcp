@@ -61,6 +61,7 @@ interface SideStats {
   jargonHits: number; jargonPairs: number;
   nomDensitySum: number; nomHigh: number; // nomHigh: density > 6 per 100 words
   voiceIssues: number;
+  rareHits: number; rarePairs: number; rarePctSum: number;
 }
 
 function emptyStats(): SideStats {
@@ -73,6 +74,7 @@ function emptyStats(): SideStats {
     jargonHits: 0, jargonPairs: 0,
     nomDensitySum: 0, nomHigh: 0,
     voiceIssues: 0,
+    rareHits: 0, rarePairs: 0, rarePctSum: 0,
   };
 }
 
@@ -81,11 +83,13 @@ function classify(body: string, s: SideStats): void {
   let section = "";
   let passiveHits = 0;
   let jargonHits = 0;
+  let rareHits = 0;
   for (const raw of body.split("\n")) {
     const line = raw.trimEnd();
     if (/^Readability:\s*$/.test(line)) { section = "read"; continue; }
     if (/^Passive voice/.test(line)) { section = "passive"; continue; }
     if (/^Jargon and vague wording/.test(line)) { section = "jargon"; continue; }
+    if (/^Word frequency \(Zipf/.test(line)) { section = "rare"; continue; }
     if (/^Nominalization density:/.test(line)) {
       section = "nom";
       const m = /density:\s*(-?[\d.]+)\s+per 100/.exec(line);
@@ -109,9 +113,15 @@ function classify(body: string, s: SideStats): void {
     }
     if (section === "passive" && /^-\s*"/.test(line)) passiveHits++;
     if (section === "jargon" && /^-\s*"/.test(line)) jargonHits++;
+    if (section === "rare") {
+      if (/^-\s*"/.test(line)) rareHits++;
+      const m = /^-\s*Rare words:\s*(\d+)\s*\((\d+)% of known words;/.exec(line);
+      if (m) { s.rarePctSum += parseInt(m[2], 10); if (parseInt(m[1], 10) > 0) s.rarePairs++; }
+    }
   }
   s.passiveHits += passiveHits; if (passiveHits > 0) s.passivePairs++;
   s.jargonHits += jargonHits; if (jargonHits > 0) s.jargonPairs++;
+  s.rareHits += rareHits;
 }
 
 function rates(s: SideStats) {
@@ -132,6 +142,9 @@ function rates(s: SideStats) {
     avg_nominalization_density: +(s.nomDensitySum / n).toFixed(2),
     share_nominalization_over_6: +(s.nomHigh / n).toFixed(4),
     share_voice_issue: +(s.voiceIssues / n).toFixed(4),
+    share_with_rare_word: +(s.rarePairs / n).toFixed(4),
+    rare_word_hits_per_pair: +(s.rareHits / n).toFixed(3),
+    avg_rare_word_pct: +(s.rarePctSum / n).toFixed(2),
   };
 }
 
