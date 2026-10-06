@@ -62,6 +62,7 @@ interface SideStats {
   nomDensitySum: number; nomHigh: number; // nomHigh: density > 6 per 100 words
   voiceIssues: number;
   rareHits: number; rarePairs: number; rarePctSum: number;
+  lixCount: number; lixSum: number; brouwerCount: number; brouwerSum: number;
 }
 
 function emptyStats(): SideStats {
@@ -75,6 +76,7 @@ function emptyStats(): SideStats {
     nomDensitySum: 0, nomHigh: 0,
     voiceIssues: 0,
     rareHits: 0, rarePairs: 0, rarePctSum: 0,
+    lixCount: 0, lixSum: 0, brouwerCount: 0, brouwerSum: 0,
   };
 }
 
@@ -104,6 +106,10 @@ function classify(body: string, s: SideStats): void {
     if (section === "read") {
       let m = /^-\s*Flesch-Douma:\s*(-?\d+(?:\.\d+)?)/.exec(line);
       if (m) { const v = parseFloat(m[1]); s.fdSum += v; s.fdCount++; if (v < 60) s.fdBelow60++; continue; }
+      m = /^-\s*LIX:\s*(-?\d+(?:\.\d+)?)/.exec(line);
+      if (m) { s.lixCount++; s.lixSum += parseFloat(m[1]); continue; }
+      m = /^-\s*Brouwer Leesindex:\s*(-?\d+(?:\.\d+)?)/.exec(line);
+      if (m) { s.brouwerCount++; s.brouwerSum += parseFloat(m[1]); continue; }
       m = /^-\s*Words:\s*(\d+),\s*sentences:\s*(\d+)/.exec(line);
       if (m) { s.words += parseInt(m[1], 10); s.sentences += parseInt(m[2], 10); continue; }
       m = /^-\s*Sentences over \d+ words:\s*(\d+)\s*\((\d+) over \d+\)/.exec(line);
@@ -145,6 +151,10 @@ function rates(s: SideStats) {
     share_with_rare_word: +(s.rarePairs / n).toFixed(4),
     rare_word_hits_per_pair: +(s.rareHits / n).toFixed(3),
     avg_rare_word_pct: +(s.rarePctSum / n).toFixed(2),
+    lix_coverage: +(s.lixCount / n).toFixed(4),
+    avg_lix_when_available: s.lixCount ? +(s.lixSum / s.lixCount).toFixed(1) : null,
+    brouwer_coverage: +(s.brouwerCount / n).toFixed(4),
+    avg_brouwer_when_available: s.brouwerCount ? +(s.brouwerSum / s.brouwerCount).toFixed(1) : null,
   };
 }
 
