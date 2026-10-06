@@ -15,7 +15,7 @@ they are not supported automatically by selecting an arbitrary language.
 | `check_us_english_text` | hunspell en_US + British form detection (local) | No | Check text for typos and British spelling or vocabulary, with US replacements |
 | `check_us_english_b1_text` | hunspell en_US `-m` + rule layers (local) | No | B1 plain-language proxies: readability (Flesch Reading Ease, Flesch-Kincaid, ARI), sentence/paragraph length, passive voice, jargon, wordy phrases, hidden verbs, filler, idioms, nominalization density, "you" address |
 | `validate_us_english_word` | hunspell en_US + British form detection (local) | No | Check a single English word for correct US English spelling and suggest replacements |
-| `check_dutch_text` | OpenTaal/hunspell (local) | No | Check a complete text and return flagged words, suggestions, and positions |
+| `check_dutch_text` | OpenTaal/hunspell + selected spelling rules (local) | No | Check words and selected compounds, hyphens, and calendar capitalization; return suggestions, positions, rule IDs, explanations, confidence, and source links |
 | `check_dutch_b1_text` | OpenTaal/hunspell `-m` + rule layers (local) | No | B1 simplicity proxies: readability (Flesch-Douma, ARI), sentence/paragraph length, passive voice, officialese jargon, filler, idioms, nominalization density, je/u voice |
 | `validate_dutch_word` | OpenTaal/hunspell (local) | No | Check a single Dutch word locally for correct spelling, with suggestions |
 | `get_dutch_word_details` | woordenlijst.org (MolexServe) | Yes | Retrieve lemma details: part of speech, pronunciation, hyphenation, paradigm, and diminutive forms |
@@ -31,6 +31,26 @@ Straffe Sites US English guidelines, and provides a US replacement for each matc
 (1.2 seconds between calls); use it only for individual important words.
 Tool descriptions and status messages are in US English; Dutch words and
 upstream dictionary labels retain their original language.
+
+## Dutch spelling rules
+
+`check_dutch_text` also checks selected patterns that a word dictionary misses:
+`btw nummer` → `btw-nummer`, `keuken tafel` → `keukentafel`, `auto ongeluk` →
+`auto-ongeluk`, and `3D printer` → `3D-printer`. Calendar cues such as `op Maandag`
+and `in Januari` produce medium-confidence suggestions for lowercase spelling.
+Each rule finding includes its ID, explanation, original source positions,
+confidence, and a precise Team Taaladvies source link.
+
+The rule layer protects code, marked headings, quotations, and other selected
+non-prose spans. Pass optional `protected_terms` for exact case-sensitive names
+or unmarked titles; horizontal whitespace may vary. This protection does not
+whitelist Hunspell dictionary words.
+Accepted variants such as `rode kool` / `rodekool`, optional clarity hyphens, and
+meaning-dependent word groups are not automatically joined or rewritten.
+
+This is a small, local spelling layer, not a general grammar checker. See the
+[rule catalog, exceptions, limits, and attribution](docs/dutch-spelling.md).
+B1 readability remains a separate check.
 
 ## B1 simplicity checks
 

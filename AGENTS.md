@@ -66,6 +66,24 @@ Guidelines for AI agents (Hermes, etc.) working in this repository.
 - Token and rule positions are offsets into the original text; never look
   them up with `text.indexOf(word)` (it matches inside other words).
 
+## Dutch contextual spelling layer (since v0.6.0)
+
+- `src/dutch-spelling.ts` adds selected compound, hyphen, and calendar rules
+  to `check_dutch_text`; C Hunspell remains the word-check engine.
+- Use closed, source-backed patterns, not arbitrary dictionary-based joins.
+  Add both incorrect examples and accepted alternatives as regression tests.
+  Exclude ambiguous finite verbs (`offerte aanvraag`, `menu uitdraai`) and
+  double objects (`klanten service`), not only infinitives. Test typography,
+  quotation variants, malformed markup, and Unicode-aware word boundaries.
+- Every finding needs a stable rule ID, an original English explanation,
+  original UTF-16 start/end offsets, confidence, and precise source metadata.
+- Calendar homographs require explicit time cues. Preserve marked titles,
+  quoted text, and caller-supplied case-sensitive `protected_terms`. Do not
+  claim universal proper-name recognition or general grammar checking.
+- Mask protected spans with length-preserving barriers, not whitespace that
+  lets a match bridge hidden code or markup. Keep B1 behavior independent.
+- Sources, reuse terms, exceptions, and limits: `docs/dutch-spelling.md`.
+
 ## Development practices
 
 - TypeScript, Node 18+. Tests: `npx tsx --test tests/*.test.ts` (node:test + assert).

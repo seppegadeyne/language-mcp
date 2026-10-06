@@ -5,6 +5,7 @@ import { hunspellWords } from './hunspell.js';
 import { MolexClient } from './molex.js';
 import { extractWords } from './tokenize.js';
 import { findBritticisms } from './britticisms.js';
+import { findDutchSpellingIssues } from './dutch-spelling.js';
 import { analyzeProse, wordTokens } from './prose.js';
 import { computeReadability, fleschDoumaBand, fleschReadingEaseBand } from './readability.js';
 import { findB1Hits, findNominalizations, analyzeVoice } from './b1rules.js';
@@ -15,7 +16,7 @@ import { detectPassivesEn } from './passive-en.js';
 const molex = new MolexClient();
 
 const server = new McpServer(
-  { name: 'language-mcp', version: '0.5.0' },
+  { name: 'language-mcp', version: '0.6.0' },
   { capabilities: { tools: {} } }
 );
 
@@ -94,12 +95,13 @@ server.tool(
  */
 server.tool(
   'check_dutch_text',
-  'Spell-check Dutch text locally (OpenTaal/hunspell). Returns unknown words with suggestions and positions. Use for CVs, cover letters, blog articles, any Dutch prose.',
+  'Spell-check Dutch text locally with OpenTaal/hunspell and selected compound, hyphen, and calendar capitalization rules. Returns unknown words plus rule findings with suggestions, original positions, rule IDs, explanations, confidence, and Team Taaladvies source links. Not a grammar checker. Mark names or titles with protected_terms when needed. Use for CVs, cover letters, blog articles, any Dutch prose.',
   {
     text: z.string().describe('The Dutch text to check'),
     context: z.string().optional().describe('Optional label, e.g. "cover letter Acme"'),
+    protected_terms: z.array(z.string().min(1).max(200)).max(100).optional().describe('Case-sensitive names or titles to exclude from the rule layer (up to 100; horizontal whitespace may vary). Does not whitelist dictionary words.'),
   },
-  async ({ text }) => {
+  async ({ text, protected_terms }) => {
     const tokens = extractWords(text);
     const words = tokens.map((t) => t.clean);
     const results = await hunspellWords(words);
@@ -128,20 +130,32 @@ server.tool(
     }
     flagged.sort((a, b) => b.count - a.count || a.word.localeCompare(b.word));
 
+    const rules = findDutchSpellingIssues(text, { protectedTerms: protected_terms });
     const totalWords = tokens.length;
     const uniqueFlagged = flagged.length;
     const lines: string[] = [
       `Dutch spell check (OpenTaal dictionary, local)`,
       `${totalWords} words checked, ${uniqueFlagged} unknown words.`,
+      `${rules.length} rule findings (selected patterns; review before changing text).`,
     ];
     if (flagged.length === 0) {
-      lines.push('OK: no unknown words found.');
+      lines.push(rules.length === 0
+        ? 'OK: no unknown words or selected rule findings found.'
+        : 'No unknown words found.');
     } else {
       lines.push('Potential spelling errors (suggestions = closest corrections):');
       for (const f of flagged) {
         const sug = f.suggestions.length ? f.suggestions.join(', ') : '(none)';
         const cnt = f.count > 1 ? ` [${f.count}x]` : '';
         lines.push(`- ${f.word}${cnt} → ${sug} (position ${f.first_index})`);
+      }
+    }
+    if (rules.length > 0) {
+      lines.push('Rule-based spelling findings:');
+      for (const hit of rules) {
+        lines.push(`- [${hit.ruleId}] "${hit.matched}" → "${hit.suggestion}" (position ${hit.index}, end ${hit.end}; ${hit.confidence} confidence)`);
+        lines.push(`  ${hit.explanation}`);
+        lines.push(`  Source: ${hit.source.url} (${hit.source.name}, ${hit.source.rule}; checked ${hit.source.checked})`);
       }
     }
     return { content: [{ type: 'text', text: lines.join('\n') }] };
