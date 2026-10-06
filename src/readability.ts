@@ -14,6 +14,16 @@
  *   0.39 * ASL + 11.8 * ASW - 15.59.
  * - ARI (Smith & Senter 1967): 4.71 * chars/word + 0.5 * words/sentence - 21.43.
  *   Language-neutral mechanism, English-validated grade levels.
+ * - LIX (Björnsson 1968): words/sentences + 100 * (words > 6 letters) / words.
+ *   Swedish scale: <25 children's books, 25-30 simple, 30-40 normal,
+ *   40-50 business, 50-60 specialist, >60 very difficult. Mechanism is
+ *   language-neutral but the scale is NOT validated for Dutch — Dutch
+ *   compounds inflate the long-word count, so report as an indication only.
+ * - Brouwer Leesindex A (Brouwer 1963/1974, Dutch Flesch re-calibration):
+ *   195 - (2/3) * syllables-per-100-words - 2 * avg-sentence-length.
+ *   Equivalent per-word form: 195 - 66.667 * ASW - 2 * ASL. Sentence length
+ *   weighs ~2x heavier than in Flesch-Douma (0.93), so it flags long
+ *   sentences more aggressively. Not empirically re-validated recently.
  * ASL = average sentence length in words; ASW = average syllables per word.
  */
 
@@ -26,6 +36,8 @@ export interface ReadabilityStats {
   fleschDouma: number | null; // Dutch only
   fleschReadingEase: number | null; // English only
   fleschKincaidGrade: number | null; // English only
+  lix: number | null; // Läsbarhetsindex (Dutch tool only)
+  brouwer: number | null; // Brouwer Leesindex A (Dutch only)
   ari: number | null;
   wordCount: number;
   sentenceCount: number;
@@ -83,12 +95,14 @@ export function computeReadability(
   let syllables = 0;
   let charCount = 0;
   let longWords = 0;
+  let longLetterWords = 0;
   for (const s of sentences) {
     for (const w of s.words) {
       const n = syl(w.clean);
       syllables += n;
       charCount += w.clean.length;
       if (n >= longAt) longWords++;
+      if (w.clean.length > 6) longLetterWords++;
     }
   }
   const avgSentenceLength = sentenceCount > 0 ? wordCount / sentenceCount : 0;
@@ -100,6 +114,8 @@ export function computeReadability(
   let fleschReadingEase: number | null = null;
   let fleschKincaidGrade: number | null = null;
   let ari: number | null = null;
+  let lix: number | null = null;
+  let brouwer: number | null = null;
   if (wordCount >= t.minWords && sentenceCount >= 3) {
     const asl = wordCount / sentenceCount;
     const asw = syllables / wordCount;
@@ -110,6 +126,12 @@ export function computeReadability(
       fleschKincaidGrade = round1(0.39 * asl + 11.8 * asw - 15.59);
     }
     ari = round1(4.71 * (charCount / wordCount) + 0.5 * asl - 21.43);
+    if (lang === 'nl') {
+      // LIX: long words counted as > 6 letters (letters, not syllables).
+      lix = round1(asl + (100 * longLetterWords) / wordCount);
+      // Brouwer Leesindex A: 195 - (2/3) * (syllables per 100 words) - 2 * ASL.
+      brouwer = round1(195 - (2 / 3) * (100 * asw) - 2 * asl);
+    }
   }
 
   return {
@@ -117,6 +139,8 @@ export function computeReadability(
     fleschDouma,
     fleschReadingEase,
     fleschKincaidGrade,
+    lix,
+    brouwer,
     ari,
     wordCount,
     sentenceCount,
