@@ -170,7 +170,7 @@ server.tool(
  */
 server.tool(
   'check_dutch_b1_text',
-  'Check Dutch text for B1-level simplicity proxies: readability (Flesch-Douma, ARI), sentence and paragraph length, passive voice (hunspell morphology), officialese jargon with plain replacements, filler words, idioms, rare-word flags from a Zipf frequency table (OpenSubtitles2018 top 50k, spoken-language bias), nominalization density, and je/u voice consistency. These are deterministic proxies, not a validated B1 verdict. Local (hunspell + OpenTaal); no network. Use together with check_dutch_text (spelling) for complete language review.',
+  'Check Dutch text for B1-level simplicity proxies: readability (Flesch-Douma, ARI, LIX, Brouwer Leesindex), sentence and paragraph length, passive voice (hunspell morphology), officialese jargon with plain replacements, filler words, idioms, rare-word flags from a Zipf frequency table (OpenSubtitles2018 top 50k, spoken-language bias), nominalization density, and je/u voice consistency. These are deterministic proxies, not a validated B1 verdict. Local (hunspell + OpenTaal); no network. Use together with check_dutch_text (spelling) for complete language review.',
   {
     text: z.string().describe('The Dutch text to check'),
     context: z.string().optional().describe('Optional label, e.g. "webpage about page"'),
@@ -212,6 +212,8 @@ server.tool(
         lines.push(`- Flesch-Douma: n/a (sample below 50 words / fewer than 3 sentences; formulas unstable on short samples)`);
       }
       if (stats.ari !== null) lines.push(`- ARI: ${stats.ari} (grade-level indication)`);
+      if (stats.lix !== null) lines.push(`- LIX: ${stats.lix} (Swedish scale 25/30/40/50/60; not validated for Dutch — compounds inflate it)`);
+      if (stats.brouwer !== null) lines.push(`- Brouwer Leesindex: ${stats.brouwer} (second Dutch Flesch variant; sentence length weighs 2x vs Flesch-Douma's 0.93)`);
       const warnAt = warn_sentence_words ?? 15;
       const flagAt = max_sentence_words ?? 20;
       lines.push(`- Words: ${stats.wordCount}, sentences: ${stats.sentenceCount}, avg ${stats.avgSentenceLength} words/sentence`);
