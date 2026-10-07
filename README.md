@@ -16,7 +16,7 @@ they are not supported automatically by selecting an arbitrary language.
 | `check_us_english_b1_text` | hunspell en_US `-m` + rule layers (local) | No | B1 plain-language proxies: readability (Flesch Reading Ease, Flesch-Kincaid, ARI), sentence/paragraph length, passive voice, jargon, wordy phrases, hidden verbs, filler, idioms, nominalization density, "you" address |
 | `validate_us_english_word` | hunspell en_US + British form detection (local) | No | Check a single English word for correct US English spelling and suggest replacements |
 | `check_dutch_text` | OpenTaal/hunspell + selected spelling rules (local) | No | Check words and selected compounds, hyphens, and calendar capitalization; return suggestions, positions, rule IDs, explanations, confidence, and source links |
-| `check_dutch_b1_text` | OpenTaal/hunspell `-m` + rule layers (local) | No | B1 simplicity proxies: readability (Flesch-Douma, ARI), sentence/paragraph length, passive voice, officialese jargon, filler, idioms, nominalization density, je/u voice |
+| `check_dutch_b1_text` | OpenTaal/hunspell `-m` + rule layers (local) | No | B1 simplicity proxies: readability (Flesch-Douma, ARI, LIX, Brouwer Leesindex), sentence/paragraph length, passive voice, officialese jargon, filler, idioms, rare-word flags from a Zipf frequency table with plain-synonym suggestions (Open Dutch WordNet), nominalization density, je/u voice |
 | `validate_dutch_word` | OpenTaal/hunspell (local) | No | Check a single Dutch word locally for correct spelling, with suggestions |
 | `get_dutch_word_details` | woordenlijst.org (MolexServe) | Yes | Retrieve lemma details: part of speech, pronunciation, hyphenation, paradigm, and diminutive forms |
 
@@ -67,8 +67,22 @@ guideline: write new material at B1, aiming for A2), not an empirically
 validated text norm. What the tool measures:
 
 - Readability: Flesch-Douma reading ease (NL-adapted Flesch; practical B1
-  band ~60-70) and ARI as a second, language-neutral indication. Formulas
-  are suppressed below 50 words / 3 sentences (short-sample guard).
+  band ~60-70), ARI as a second, language-neutral indication, LIX
+  (Björnsson 1968; Swedish scale, not validated for Dutch — compounds
+  inflate it), and Brouwer Leesindex A (1963 Dutch Flesch recalibration
+  that weighs sentence length twice as heavily as Flesch-Douma).
+  Formulas are suppressed below 50 words / 3 sentences (short-sample
+  guard; the guard is intentional, see the evaluation baseline).
+- Word frequency: rare-word flags from a bundled Zipf table of the top
+  50,000 Dutch word forms (derived from FrequencyWords/OpenSubtitles2018 —
+  spoken-language bias, documented in `assets/frequency/README.md`). Words
+  the table knows but scores rare (default below Zipf 3, configurable via
+  `rare_word_zipf_max`) are flagged with value, count, and position.
+  Unknown words are never flagged: Dutch compounds and proper names
+  dominate that set. When Open Dutch WordNet lists a clearly more frequent
+  single-word synonym (at least half a Zipf point), the flag includes
+  concrete suggestions ("staken → try: ophouden, stoppen"); suggestions are
+  review hints, never automatic replacements.
 - Sentence and paragraph length against configurable thresholds (defaults:
   warn >15, flag >20 words per sentence; 150 words per paragraph, matching
   common editorial guidelines).
@@ -86,6 +100,17 @@ validated text norm. What the tool measures:
 All checks are local and offline: the same bundled OpenTaal assets and
 hunspell binary as the spelling tools, plus pure TypeScript rule layers in
 the spirit of the British-form detector.
+
+The Dutch B1 proxies are grounded in an evaluation baseline: the bundled
+City of Amsterdam complex–simple corpus (1,311 sentence pairs, EUPL-1.2,
+evaluation-only — nothing from it runs at check time) with a harness that
+measures how much more often each proxy flags the complex side of a pair
+(`tests/eval/b1-amsterdam.ts`, committed baseline in
+`tests/eval/baseline-v1.json`, protocol in `docs/b1-eval.md`). On that set,
+passive voice separates +11.8 percentage points and sentence length +10.4;
+the rare-word signal separates +3.8; nominalization density and the
+long-word share barely separate, and the readability formulas have 0%
+coverage on single sentences because of the short-sample guard.
 
 ### US English
 
@@ -167,6 +192,28 @@ Code: MIT.
 Dictionary assets:
 - `assets/nl.dic` / `assets/nl.aff`: © OpenTaal — Revised BSD License and/or CC BY 3.0. Full terms are in `assets/LICENSE.txt`; source: https://github.com/OpenTaal/opentaal-hunspell. Reusing these assets requires attribution to OpenTaal.
 - `assets/en_US.dic` / `assets/en_US.aff`: based on the SCOWL word list (Kevin Atkinson, LGPL), with an affix file from Geoff Kuenning's Ispell (BSD), distributed through LibreOffice/dictionaries. See `assets/en_US-LICENSE.txt` and `assets/en_US-README.txt`; source: https://github.com/LibreOffice/dictionaries/tree/master/en.
+
+Data assets (each bundled with its own license and attribution file, kept
+separate from the MIT code):
+
+- `assets/frequency/nl-zipf.tsv`: Zipf frequencies for the top 50,000 Dutch
+  word forms, derived from hermitdave/FrequencyWords `nl_50k.txt`
+  (OpenSubtitles2018). Content CC BY-SA 4.0; see
+  `assets/frequency/README.md` (includes the spoken-language bias caveat).
+- `assets/synonyms/nl-synonyms.tsv`: Dutch synonym table (31,199 lemmas),
+  derived from Open Dutch WordNet release 1.4 (VU Amsterdam, CLTL). CC BY-SA
+  4.0; see `assets/synonyms/LICENSE` and `assets/synonyms/README.md`. When
+  using this data, cite: Postma, Van Miltenburg, Segers, Schoen & Vossen
+  (2016), "Open Dutch WordNet", Proceedings of the 8th Global WordNet
+  Conference. CC BY-SA obligations apply to distributing the derived data,
+  not to texts checked with the tool.
+- `assets/eval/amsterdam-complex-simple/`: City of Amsterdam complex–simple
+  sentence pairs (EUPL-1.2) and the Hobo 2022 lexical-simplification set,
+  bundled as evaluation-only assets for the B1 harness; never used at
+  runtime. See the README in that directory.
+
+Evaluation baselines (`tests/eval/`) are committed artifacts of the runs
+documented in `docs/b1-eval.md`.
 
 `get_dutch_word_details` data: woordenlijst.org (Instituut voor de Nederlandse
 Taal / Taalunie), accessed through its public web service without a separate
