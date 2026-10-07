@@ -10,6 +10,7 @@ import { analyzeProse, wordTokens } from './prose.js';
 import { computeReadability, fleschDoumaBand, fleschReadingEaseBand } from './readability.js';
 import { findB1Hits, findNominalizations, analyzeVoice } from './b1rules.js';
 import { getDutchZipf } from './frequency.js';
+import { suggestSynonyms } from './synonyms.js';
 import { findB1HitsEn, findNominalizationsEn, analyzeAddressEn } from './b1rules-en.js';
 import { detectPassives } from './passive.js';
 import { detectPassivesEn } from './passive-en.js';
@@ -170,7 +171,7 @@ server.tool(
  */
 server.tool(
   'check_dutch_b1_text',
-  'Check Dutch text for B1-level simplicity proxies: readability (Flesch-Douma, ARI, LIX, Brouwer Leesindex), sentence and paragraph length, passive voice (hunspell morphology), officialese jargon with plain replacements, filler words, idioms, rare-word flags from a Zipf frequency table (OpenSubtitles2018 top 50k, spoken-language bias), nominalization density, and je/u voice consistency. These are deterministic proxies, not a validated B1 verdict. Local (hunspell + OpenTaal); no network. Use together with check_dutch_text (spelling) for complete language review.',
+  'Check Dutch text for B1-level simplicity proxies: readability (Flesch-Douma, ARI, LIX, Brouwer Leesindex), sentence and paragraph length, passive voice (hunspell morphology), officialese jargon with plain replacements, filler words, idioms, rare-word flags from a Zipf frequency table (OpenSubtitles2018 top 50k, spoken-language bias) with plain-synonym suggestions from Open Dutch WordNet, nominalization density, and je/u voice consistency. These are deterministic proxies, not a validated B1 verdict. Local (hunspell + OpenTaal); no network. Use together with check_dutch_text (spelling) for complete language review.',
   {
     text: z.string().describe('The Dutch text to check'),
     context: z.string().optional().describe('Optional label, e.g. "webpage about page"'),
@@ -280,11 +281,16 @@ server.tool(
         lines.push(`- No rare words below Zipf ${zipfMax}.`);
       } else {
         for (const [word, info] of rareList.slice(0, 20)) {
-          lines.push(`- "${word}" (Zipf ${info.zipf.toFixed(1)}, ${info.count}x, position ${info.index}) — rare word, consider a plain alternative`);
+          const syn = suggestSynonyms(word);
+          const tail = syn
+            ? `rare word, try: ${syn.suggestions.join(', ')}`
+            : 'rare word, consider a plain alternative';
+          lines.push(`- "${word}" (Zipf ${info.zipf.toFixed(1)}, ${info.count}x, position ${info.index}) — ${tail}`);
         }
         if (rareList.length > 20) lines.push(`- ...and ${rareList.length - 20} more`);
       }
       lines.push(`- Rare words: ${rareList.length} (${knownWords > 0 ? Math.round((rareList.length / knownWords) * 100) : 0}% of known words; ${knownWords} in table)`);
+      lines.push(`- Synonym suggestions: Open Dutch WordNet (CC BY-SA), only shown when clearly more frequent`);
 
       lines.push('');
       lines.push(`Nominalization density: ${nomReport.per100} per 100 words${nomReport.per100 > 8 ? ' (high — prefer verbs over nouns)' : ''}`);
