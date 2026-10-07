@@ -9,7 +9,7 @@ import { findDutchSpellingIssues } from './dutch-spelling.js';
 import { analyzeProse, wordTokens } from './prose.js';
 import { computeReadability, fleschDoumaBand, fleschReadingEaseBand } from './readability.js';
 import { findB1Hits, findNominalizations, analyzeVoice } from './b1rules.js';
-import { getDutchZipf } from './frequency.js';
+import { getDutchZipf, frequencyTableAvailable } from './frequency.js';
 import { suggestSynonyms } from './synonyms.js';
 import { findB1HitsEn, findNominalizationsEn, analyzeAddressEn } from './b1rules-en.js';
 import { detectPassives } from './passive.js';
@@ -261,7 +261,13 @@ server.tool(
       // Word-frequency layer (Zipf, OpenSubtitles2018 top-50k table).
       // Known-but-rare words get flagged; unknown words are never flagged
       // (compounds and names dominate the unknown set — precision first).
+      // A missing table skips the layer with a notice instead of failing
+      // the whole check (regression: ENOENT crash, moonshot #183).
       const zipfMax = rare_word_zipf_max ?? 3;
+      if (!frequencyTableAvailable()) {
+        lines.push('');
+        lines.push(`Word frequency: skipped (assets/frequency/nl-zipf.tsv not found in this install).`);
+      } else {
       const seenRare = new Map<string, { zipf: number; index: number; count: number }>();
       let knownWords = 0;
       for (const tok of extractWords(text)) {
@@ -291,6 +297,7 @@ server.tool(
       }
       lines.push(`- Rare words: ${rareList.length} (${knownWords > 0 ? Math.round((rareList.length / knownWords) * 100) : 0}% of known words; ${knownWords} in table)`);
       lines.push(`- Synonym suggestions: Open Dutch WordNet (CC BY-SA), only shown when clearly more frequent`);
+      }
 
       lines.push('');
       lines.push(`Nominalization density: ${nomReport.per100} per 100 words${nomReport.per100 > 8 ? ' (high — prefer verbs over nouns)' : ''}`);
