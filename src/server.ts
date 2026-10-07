@@ -9,6 +9,7 @@ import { findDutchSpellingIssues } from './dutch-spelling.js';
 import { analyzeProse, wordTokens } from './prose.js';
 import { computeReadability, fleschDoumaBand, fleschReadingEaseBand } from './readability.js';
 import { findB1Hits, findNominalizations, analyzeVoice } from './b1rules.js';
+import { getDutchZipf } from './frequency.js';
 import { findB1HitsEn, findNominalizationsEn, analyzeAddressEn } from './b1rules-en.js';
 import { detectPassives } from './passive.js';
 import { detectPassivesEn } from './passive-en.js';
@@ -169,7 +170,7 @@ server.tool(
  */
 server.tool(
   'check_dutch_b1_text',
-  'Check Dutch text for B1-level simplicity proxies: readability (Flesch-Douma, ARI), sentence and paragraph length, passive voice (hunspell morphology), officialese jargon with plain replacements, filler words, idioms, nominalization density, and je/u voice consistency. These are deterministic proxies, not a validated B1 verdict. Local (hunspell + OpenTaal); no network. Use together with check_dutch_text (spelling) for complete language review.',
+  'Check Dutch text for B1-level simplicity proxies: readability (Flesch-Douma, ARI), sentence and paragraph length, passive voice (hunspell morphology), officialese jargon with plain replacements, filler words, idioms, rare-word flags from a Zipf frequency table (OpenSubtitles2018 top 50k, spoken-language bias), nominalization density, and je/u voice consistency. These are deterministic proxies, not a validated B1 verdict. Local (hunspell + OpenTaal); no network. Use together with check_dutch_text (spelling) for complete language review.',
   {
     text: z.string().describe('The Dutch text to check'),
     context: z.string().optional().describe('Optional label, e.g. "webpage about page"'),
@@ -178,8 +179,9 @@ server.tool(
     max_para_words: z.number().int().positive().optional().describe('Flag paragraphs above this many words (default 150)'),
     flesch_douma_min: z.number().optional().describe('Minimum Flesch-Douma score for the B1 band (default 60)'),
     voice: z.enum(['je', 'u']).optional().describe('Expected address form (default je)'),
+    rare_word_zipf_max: z.number().optional().describe('Flag known words with a Zipf frequency below this value as rare/difficult (default 3). Zipf table: top 50k Dutch forms from OpenSubtitles2018 (spoken-language bias); unknown words are never flagged.'),
   },
-  async ({ text, context, max_sentence_words, warn_sentence_words, max_para_words, flesch_douma_min, voice = 'je' }) => {
+  async ({ text, context, max_sentence_words, warn_sentence_words, max_para_words, flesch_douma_min, voice = 'je', rare_word_zipf_max }) => {
     try {
       const { sentences, paragraphs } = analyzeProse(text, 'nl');
       const paraWordCounts = paragraphs.map((p) => wordTokens(p.text).length);
@@ -252,6 +254,35 @@ server.tool(
       if (idioms.length > 0) {
         plainLines(lines, idioms, 'Idioms (consider plain phrasing for NT2 readers):');
       }
+
+      // Word-frequency layer (Zipf, OpenSubtitles2018 top-50k table).
+      // Known-but-rare words get flagged; unknown words are never flagged
+      // (compounds and names dominate the unknown set — precision first).
+      const zipfMax = rare_word_zipf_max ?? 3;
+      const seenRare = new Map<string, { zipf: number; index: number; count: number }>();
+      let knownWords = 0;
+      for (const tok of extractWords(text)) {
+        const zipf = getDutchZipf(tok.clean);
+        if (zipf === null) continue;
+        knownWords++;
+        if (zipf >= zipfMax) continue;
+        const key = tok.clean.toLowerCase();
+        const prev = seenRare.get(key);
+        if (prev) prev.count++;
+        else seenRare.set(key, { zipf, index: tok.index, count: 1 });
+      }
+      const rareList = [...seenRare.entries()].sort((a, b) => a[1].zipf - b[1].zipf);
+      lines.push('');
+      lines.push(`Word frequency (Zipf, OpenSubtitles2018 — spoken-language bias, top 50k table):`);
+      if (rareList.length === 0) {
+        lines.push(`- No rare words below Zipf ${zipfMax}.`);
+      } else {
+        for (const [word, info] of rareList.slice(0, 20)) {
+          lines.push(`- "${word}" (Zipf ${info.zipf.toFixed(1)}, ${info.count}x, position ${info.index}) — rare word, consider a plain alternative`);
+        }
+        if (rareList.length > 20) lines.push(`- ...and ${rareList.length - 20} more`);
+      }
+      lines.push(`- Rare words: ${rareList.length} (${knownWords > 0 ? Math.round((rareList.length / knownWords) * 100) : 0}% of known words; ${knownWords} in table)`);
 
       lines.push('');
       lines.push(`Nominalization density: ${nomReport.per100} per 100 words${nomReport.per100 > 8 ? ' (high — prefer verbs over nouns)' : ''}`);
