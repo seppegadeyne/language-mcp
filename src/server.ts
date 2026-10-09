@@ -18,7 +18,7 @@ import { detectPassivesEn } from './passive-en.js';
 const molex = new MolexClient();
 
 const server = new McpServer(
-  { name: 'language-mcp', version: '0.8.1' },
+  { name: 'language-mcp', version: '0.8.2' },
   { capabilities: { tools: {} } }
 );
 

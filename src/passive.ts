@@ -21,7 +21,7 @@
  */
 
 import { spawn } from 'node:child_process';
-import { resolveDict } from './hunspell.js';
+import { resolveDict, utf8SpawnEnv } from './hunspell.js';
 import { countSyllables } from './syllables.js';
 import type { Sentence } from './prose.js';
 
@@ -66,6 +66,7 @@ export async function hunspellMorph(words: string[], lang: 'nl' | 'en_US' = 'nl'
   return await new Promise<Map<string, MorphInfo>>((resolve, reject) => {
     const proc = spawn('hunspell', ['-d', resolveDict(lang), '-m'], {
       stdio: ['pipe', 'pipe', 'pipe'],
+      env: utf8SpawnEnv(),
     });
     let out = '';
     const timer = setTimeout(() => {

@@ -3,6 +3,24 @@ import path from 'node:path';
 import fs from 'node:fs';
 
 /**
+ * Locale-safe spawn environment for hunspell.
+ *
+ * MCP clients (Python and TypeScript SDK StdioClientTransport) launch this
+ * server with a sanitized environment (PATH, HOME, ...) that omits LANG and
+ * LC_*. Without a UTF-8 locale hunspell converts our UTF-8 input through
+ * ANSI_X3.4-1968 ("iconv: UTF-8 -> ANSI_X3.4-1968" on stderr): accented
+ * letters are mangled, "wél" splits into two `-m` morphology blocks (breaking
+ * the block-count contract), and "België" turns into a bogus unknown word with
+ * garbage suggestions in `-a` mode. Force a UTF-8 locale unless the inherited
+ * environment already announces one.
+ */
+export function utf8SpawnEnv(): NodeJS.ProcessEnv {
+  const current = [process.env.LC_ALL, process.env.LC_CTYPE, process.env.LANG].find((v) => v) ?? '';
+  if (/UTF-?8/i.test(current)) return process.env;
+  return { ...process.env, LC_ALL: 'C.UTF-8' };
+}
+
+/**
  * Hunspell pipe (-a / ispell protocol) wrapper for Dutch spell checking.
  *
  * Protocol notes (verified against hunspell 1.7.3):
@@ -35,6 +53,7 @@ export async function hunspellWords(words: string[], lang: 'nl' | 'en_US' = 'nl'
   return await new Promise<Map<string, HunspellResult>>((resolve, reject) => {
     const proc = spawn('hunspell', ['-d', resolveDict(lang), '-a'], {
       stdio: ['pipe', 'pipe', 'pipe'],
+      env: utf8SpawnEnv(),
     });
     let out = '';
     const timer = setTimeout(() => {
