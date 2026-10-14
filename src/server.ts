@@ -3,7 +3,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import { hunspellWords } from './hunspell.js';
 import { MolexClient } from './molex.js';
-import { extractWords } from './tokenize.js';
+import { extractWords, scanWords, MAX_SPELL_WORDS } from './tokenize.js';
 import { findBritticisms } from './britticisms.js';
 import { findDutchSpellingIssues } from './dutch-spelling.js';
 import { analyzeProse, wordTokens } from './prose.js';
@@ -14,11 +14,12 @@ import { suggestSynonyms } from './synonyms.js';
 import { findB1HitsEn, findNominalizationsEn, analyzeAddressEn } from './b1rules-en.js';
 import { detectPassives } from './passive.js';
 import { detectPassivesEn } from './passive-en.js';
+import { inputErrorResult, resolveInput, sourceSchema, type SourceArgs } from './source.js';
 
 const molex = new MolexClient();
 
 const server = new McpServer(
-  { name: 'language-mcp', version: '0.8.2' },
+  { name: 'language-mcp', version: '0.9.0' },
   { capabilities: { tools: {} } }
 );
 
@@ -36,10 +37,11 @@ server.tool(
   'check_us_english_text',
   'Check English text for US English compliance: typos (hunspell en_US) + British spellings/vocabulary (colour, whilst, towards, bespoke, webshop, sole trader...) with US replacements. Use for EN pages, blogs, US-facing copy.',
   {
-    text: z.string().describe('The English text to check'),
+    text: z.string().optional().describe('The English text to check (or pass path)'),
+    ...sourceSchema,
   },
-  async ({ text }) => {
-    const tokens = extractWords(text);
+  withInput(async ({ text }) => {
+    const { tokens, truncatedAt } = scanWords(text);
     const words = tokens.map((t) => t.clean);
     const results = await hunspellWords(words, 'en_US');
 
@@ -87,8 +89,8 @@ server.tool(
     if (britts.length === 0 && flagged.length === 0) {
       lines.push('OK: no typos, no British forms found.');
     }
-    return { content: [{ type: 'text', text: lines.join('\n') }] };
-  }
+    return spellLimitNote(lines, truncatedAt);
+  })
 );
 
 /**
@@ -99,12 +101,13 @@ server.tool(
   'check_dutch_text',
   'Spell-check Dutch text locally with OpenTaal/hunspell and selected compound, hyphen, and calendar capitalization rules. Returns unknown words plus rule findings with suggestions, original positions, rule IDs, explanations, confidence, and Team Taaladvies source links. Not a grammar checker. Mark names or titles with protected_terms when needed. Use for CVs, cover letters, blog articles, any Dutch prose.',
   {
-    text: z.string().describe('The Dutch text to check'),
+    text: z.string().optional().describe('The Dutch text to check (or pass path)'),
+    ...sourceSchema,
     context: z.string().optional().describe('Optional label, e.g. "cover letter Acme"'),
     protected_terms: z.array(z.string().min(1).max(200)).max(100).optional().describe('Case-sensitive names or titles to exclude from the rule layer (up to 100; horizontal whitespace may vary). Does not whitelist dictionary words.'),
   },
-  async ({ text, protected_terms }) => {
-    const tokens = extractWords(text);
+  withInput(async ({ text, protected_terms }) => {
+    const { tokens, truncatedAt } = scanWords(text);
     const words = tokens.map((t) => t.clean);
     const results = await hunspellWords(words);
     const flagged: Array<{
@@ -160,8 +163,8 @@ server.tool(
         lines.push(`  Source: ${hit.source.url} (${hit.source.name}, ${hit.source.rule}; checked ${hit.source.checked})`);
       }
     }
-    return { content: [{ type: 'text', text: lines.join('\n') }] };
-  }
+    return spellLimitNote(lines, truncatedAt);
+  })
 );
 
 /**
@@ -173,7 +176,8 @@ server.tool(
   'check_dutch_b1_text',
   'Check Dutch text for B1-level simplicity proxies: readability (Flesch-Douma, ARI, LIX, Brouwer Leesindex), sentence and paragraph length, passive voice (hunspell morphology), officialese jargon with plain replacements, filler words, idioms, rare-word flags from a Zipf frequency table (OpenSubtitles2018 top 50k, spoken-language bias) with plain-synonym suggestions from Open Dutch WordNet, nominalization density, and je/u voice consistency. These are deterministic proxies, not a validated B1 verdict. Local (hunspell + OpenTaal); no network. Use together with check_dutch_text (spelling) for complete language review.',
   {
-    text: z.string().describe('The Dutch text to check'),
+    text: z.string().optional().describe('The Dutch text to check (or pass path)'),
+    ...sourceSchema,
     context: z.string().optional().describe('Optional label, e.g. "webpage about page"'),
     max_sentence_words: z.number().int().positive().optional().describe('Flag sentences above this many words (default 20)'),
     warn_sentence_words: z.number().int().positive().optional().describe('Warn from this many words per sentence (default 15)'),
@@ -182,7 +186,7 @@ server.tool(
     voice: z.enum(['je', 'u']).optional().describe('Expected address form (default je)'),
     rare_word_zipf_max: z.number().optional().describe('Flag known words with a Zipf frequency below this value as rare/difficult (default 3). Zipf table: top 50k Dutch forms from OpenSubtitles2018 (spoken-language bias); unknown words are never flagged.'),
   },
-  async ({ text, context, max_sentence_words, warn_sentence_words, max_para_words, flesch_douma_min, voice = 'je', rare_word_zipf_max }) => {
+  withInput(async ({ text, context, max_sentence_words, warn_sentence_words, max_para_words, flesch_douma_min, voice = 'je', rare_word_zipf_max }) => {
     try {
       const { sentences, paragraphs } = analyzeProse(text, 'nl');
       const paraWordCounts = paragraphs.map((p) => wordTokens(p.text).length);
@@ -270,7 +274,7 @@ server.tool(
       } else {
       const seenRare = new Map<string, { zipf: number; index: number; count: number }>();
       let knownWords = 0;
-      for (const tok of extractWords(text)) {
+      for (const tok of extractWords(text, Number.POSITIVE_INFINITY)) {
         const zipf = getDutchZipf(tok.clean);
         if (zipf === null) continue;
         knownWords++;
@@ -323,7 +327,7 @@ server.tool(
         isError: true,
       };
     }
-  }
+  })
 );
 
 /**
@@ -334,7 +338,8 @@ server.tool(
   'check_us_english_b1_text',
   'Check US English text for B1-level plain-language proxies: readability (Flesch Reading Ease, Flesch-Kincaid grade, ARI), sentence and paragraph length, passive voice (hunspell morphology + irregular participles), formal jargon and wordy phrases with plain replacements, hidden verbs (make a decision -> decide), filler words, idioms, nominalization density, and direct "you" address. These are deterministic proxies, not a validated B1 verdict. Local (hunspell en_US); no network. Use together with check_us_english_text (spelling and British forms) for complete language review.',
   {
-    text: z.string().describe('The English text to check'),
+    text: z.string().optional().describe('The English text to check (or pass path)'),
+    ...sourceSchema,
     context: z.string().optional().describe('Optional label, e.g. "pricing page"'),
     max_sentence_words: z.number().int().positive().optional().describe('Flag sentences above this many words (default 25, the GOV.UK limit)'),
     warn_sentence_words: z.number().int().positive().optional().describe('Warn from this many words per sentence (default 20, the plainlanguage.gov average)'),
@@ -343,7 +348,7 @@ server.tool(
     max_grade: z.number().optional().describe('Maximum Flesch-Kincaid grade level (default 9)'),
     address: z.enum(['you', 'any']).optional().describe('Expected reader address: "you" (default) reports third-person references to the reader; "any" only counts them'),
   },
-  async ({ text, context, max_sentence_words, warn_sentence_words, max_para_words, flesch_min, max_grade, address = 'you' }) => {
+  withInput(async ({ text, context, max_sentence_words, warn_sentence_words, max_para_words, flesch_min, max_grade, address = 'you' }) => {
     try {
       const { sentences, paragraphs } = analyzeProse(text, 'en');
       const paraWordCounts = paragraphs.map((p) => wordTokens(p.text).length);
@@ -447,8 +452,46 @@ server.tool(
         isError: true,
       };
     }
-  }
+  })
 );
+
+type CheckResult = { content: Array<{ type: 'text'; text: string }>; isError?: boolean };
+
+/**
+ * Resolve text/path (+ range, expected hash) before a check runs, then add one
+ * provenance line (input_sha256, code points, file and range) after the
+ * report's header line.
+ */
+function withInput<A extends SourceArgs>(
+  check: (args: A & { text: string }) => Promise<CheckResult>,
+): (args: A) => Promise<CheckResult> {
+  return async (args: A) => {
+    let input;
+    try {
+      input = await resolveInput(args);
+    } catch (e) {
+      return inputErrorResult(e);
+    }
+    const result = await check({ ...args, text: input.text });
+    const first = result.content[0];
+    if (first && first.type === 'text' && !first.text.startsWith('B1 check failed')) {
+      const lines = first.text.split('\n');
+      lines.splice(1, 0, input.summary);
+      first.text = lines.join('\n');
+    }
+    return result;
+  };
+}
+
+/**
+ * Fail closed when the spell check hit its word cap: the partial report is
+ * kept, but the result is an error so no caller can count it as full coverage.
+ */
+function spellLimitNote(lines: string[], truncatedAt: number | null): CheckResult {
+  if (truncatedAt === null) return { content: [{ type: 'text', text: lines.join('\n') }] };
+  lines.splice(1, 0, `INCOMPLETE: spelling stopped after ${MAX_SPELL_WORDS} words; text from position ${truncatedAt} on was NOT spell-checked. Split the input into ranges and check each one.`);
+  return { content: [{ type: 'text', text: lines.join('\n') }], isError: true };
+}
 
 function truncate(s: string, n: number): string {
   return s.length > n ? s.slice(0, n - 1) + '…' : s;

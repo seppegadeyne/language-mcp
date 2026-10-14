@@ -141,6 +141,39 @@ English formulas, thresholds, and rule sources:
   references to the reader ("users", "the customer") are reported when the
   expected address is "you" (default).
 
+## Checking a file: `path`, ranges, and hashes
+
+The four check tools (`check_dutch_text`, `check_dutch_b1_text`,
+`check_us_english_text`, `check_us_english_b1_text`) accept either `text` or
+`path`. With `path`, the server reads the local UTF-8 file itself, so an agent
+never has to retype a long document into a tool call. Every report includes an
+`Input:` line with the SHA-256 of the exact text that was checked:
+
+```text
+Input: file /abs/cv.md, range [0, 5401) of 5401 code points, 5401 code points checked, input_sha256 9f2c…, file_sha256 9f2c…
+```
+
+| Argument | Meaning |
+|---|---|
+| `path` | Absolute path of a UTF-8 text file (max 2 MiB; binary and invalid UTF-8 are refused). |
+| `start`, `end` | Optional half-open range `[start, end)` in Unicode code points of the file. |
+| `expected_sha256` | Optional hex SHA-256 the checked text must have. On a mismatch nothing is checked and the tool returns an error. Works with `text` too. |
+
+Hashes cover the exact UTF-8 bytes without normalization, so for a whole file
+`input_sha256` equals `sha256sum <file>`. With a range, finding positions are
+relative to the range start. To limit which folders the server may read, set
+`LANGUAGE_MCP_ROOTS` to one or more folders (separated by `:`, or `;` on
+Windows); without it, any file readable by the server process is allowed. A set
+variable that names no folder refuses every path.
+
+Spell checks stop after 20,000 words. When that happens the report starts with
+`INCOMPLETE:` and the tool returns an error, so a partial check never counts as
+full coverage: split the file into ranges instead.
+
+This supports full-coverage review: a lead agent records the file hash or chunk
+hashes in its manifest, delegates the checks per chunk, and verifies that each
+report's `input_sha256` matches.
+
 ## Example: check US English copy
 
 Call `check_us_english_text` with:

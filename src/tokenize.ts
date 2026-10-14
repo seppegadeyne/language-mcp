@@ -25,6 +25,22 @@ export const BARE_DOMAIN_RE =
 
 const blanks = (m: string) => ' '.repeat(m.length);
 
+/** Spell checks stop after this many words and say so (see spellLimitNote). */
+export const MAX_SPELL_WORDS = 20000;
+
+export interface WordScan {
+  tokens: Token[];
+  /** Offset of the first word that was NOT included, or null when nothing was cut. */
+  truncatedAt: number | null;
+}
+
+/** Like extractWords, but reports where a word cap cut the scan off. */
+export function scanWords(text: string, maxWords = MAX_SPELL_WORDS): WordScan {
+  const all = extractWords(text, maxWords + 1);
+  if (all.length <= maxWords) return { tokens: all, truncatedAt: null };
+  return { tokens: all.slice(0, maxWords), truncatedAt: all[maxWords].index };
+}
+
 export function extractWords(text: string, maxWords = 2000): Token[] {
   let t = text.replace(URL_RE, blanks).replace(EMAIL_RE, blanks).replace(BARE_DOMAIN_RE, blanks);
 

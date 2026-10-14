@@ -84,6 +84,18 @@ Guidelines for AI agents (Hermes, etc.) working in this repository.
   lets a match bridge hidden code or markup. Keep B1 behavior independent.
 - Sources, reuse terms, exceptions, and limits: `docs/dutch-spelling.md`.
 
+## File input and provenance (since v0.9.0)
+
+- `src/source.ts` resolves `text` or `path` (+ `start`/`end` code-point range,
+  `expected_sha256`) for the four check tools; `withInput` in `src/server.ts`
+  adds the `Input:` provenance line after each report header.
+- Hash the exact UTF-8 bytes and never normalize (BOM, newlines): callers
+  compare `input_sha256` with `sha256sum` and with coverage manifests.
+- Ranges are Unicode code points; finding positions stay UTF-16 offsets into
+  the checked text. Do not mix the two units.
+- `LANGUAGE_MCP_ROOTS` optionally restricts readable folders. Keep the file
+  limit, binary and UTF-8 refusals; add a test for every new input rule.
+
 ## Development practices
 
 - TypeScript, Node 18+. Tests: `npx tsx --test tests/*.test.ts` (node:test + assert).
