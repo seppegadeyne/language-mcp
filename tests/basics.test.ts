@@ -4,6 +4,13 @@ import { hunspellWords } from '../src/hunspell.js';
 import { extractWords } from '../src/tokenize.js';
 
 describe('hunspell wrapper', () => {
+  it('never runs words as hunspell pipe commands', async () => {
+    // Unescaped, "*xyzqqq" adds a word to the dictionary and "#" saves it to disk.
+    const r = await hunspellWords(['*xyzqqq', '#xyzqqq', 'xyzqqq']);
+    assert.equal(r.size, 3);
+    assert.equal(r.get('xyzqqq')?.correct, false);
+  });
+
   it('marks correct Dutch words as correct', async () => {
     const r = await hunspellWords(['pizza', 'woordenschat', 'organisatie']);
     assert.equal(r.get('pizza')?.correct, true);

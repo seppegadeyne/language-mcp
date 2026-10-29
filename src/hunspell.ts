@@ -43,26 +43,29 @@ export interface HunspellResult {
   suggestions: string[];
 }
 
-export async function hunspellWords(words: string[], lang: 'nl' | 'en_US' = 'nl'): Promise<Map<string, HunspellResult>> {
-  const results = new Map<string, HunspellResult>();
-  if (words.length === 0) return results;
+export type HunspellLang = 'nl' | 'en_US';
 
-  const unique = [...new Set(words)];
-  const input = unique.join('\n') + '\n';
-
-  return await new Promise<Map<string, HunspellResult>>((resolve, reject) => {
-    const proc = spawn('hunspell', ['-d', resolveDict(lang), '-a'], {
+/**
+ * Run one hunspell batch (`-a` or `-m`) and return one response block per
+ * input word, in input order. Shared by spell checks and morphology.
+ */
+export function hunspellBlocks(words: string[], lang: HunspellLang, mode: '-a' | '-m'): Promise<string[][]> {
+  const name = mode === '-m' ? 'hunspell -m' : 'hunspell';
+  return new Promise((resolve, reject) => {
+    const proc = spawn('hunspell', ['-d', resolveDict(lang), mode], {
       stdio: ['pipe', 'pipe', 'pipe'],
       env: utf8SpawnEnv(),
     });
     let out = '';
+    let err = '';
     const timer = setTimeout(() => {
       proc.kill();
-      reject(new Error('hunspell timed out after 20s'));
+      reject(new Error(`${name} timed out after 20s`));
     }, 20_000);
 
     proc.stdout.on('data', (d: Buffer) => (out += d.toString()));
-    proc.stderr.on('data', (d: Buffer) => (out += d.toString()));
+    // Kept out of `out`: a warning line on stderr would parse as a response block.
+    proc.stderr.on('data', (d: Buffer) => (err += d.toString()));
     proc.on('error', (e) => {
       clearTimeout(timer);
       reject(e);
@@ -70,67 +73,69 @@ export async function hunspellWords(words: string[], lang: 'nl' | 'en_US' = 'nl'
     proc.on('close', (code) => {
       clearTimeout(timer);
       if (code !== 0 && out.trim() === '') {
-        reject(new Error(`hunspell exited with ${code}`));
+        reject(new Error(`${name} exited with ${code}${err.trim() ? `: ${err.trim()}` : ''}`));
         return;
       }
-      const rawLines = out
-        .split('\n')
-        .map((l) => l.replace(/\r$/, ''))
-        .filter((l) => !l.startsWith('@(#)'));
-
       // Group into per-word blocks separated by empty lines: a compound word
       // (hyphen, em dash, ...) yields one response line per part, so a plain
       // 1:1 line zip misaligns on the first compound.
       const blocks: string[][] = [];
       let current: string[] = [];
-      for (const line of rawLines) {
-        if (line.length === 0) {
-          if (current.length > 0) {
-            blocks.push(current);
-            current = [];
-          }
-        } else {
+      for (const raw of out.split('\n')) {
+        const line = raw.replace(/\r$/, '');
+        if (line.startsWith('@(#)')) continue;
+        if (line.length > 0) {
           current.push(line);
+        } else if (current.length > 0) {
+          blocks.push(current);
+          current = [];
         }
       }
       if (current.length > 0) blocks.push(current);
-
-      // Zip: k-th response block belongs to k-th input word.
-      if (blocks.length !== unique.length) {
-        reject(
-          new Error(
-            `hunspell response count mismatch: ${blocks.length} blocks for ${unique.length} words`
-          )
-        );
+      if (blocks.length !== words.length) {
+        reject(new Error(`${name} response count mismatch: ${blocks.length} blocks for ${words.length} words`));
         return;
       }
-      for (let i = 0; i < unique.length; i++) {
-        const word = unique[i];
-        const block = blocks[i];
-        const suggestions: string[] = [];
-        let correct = true;
-        for (const line of block) {
-          if (line.startsWith('*') || line.startsWith('+')) continue;
-          correct = false;
-          if (line.startsWith('&')) {
-            const m = line.match(/^& (\S+) (\d+) \d+: (.*)$/);
-            for (const s of (m?.[3] ?? '').split(', ')) {
-              if (s && !suggestions.includes(s)) suggestions.push(s);
-            }
-          }
-          // '#'-lines: unknown without suggestions, nothing to collect.
-        }
-        results.set(word, { word, correct, suggestions: suggestions.slice(0, 8) });
-      }
-      resolve(results);
+      resolve(blocks);
     });
-    proc.stdin.write(input);
-    proc.stdin.end();
+    // A hunspell that exits early (missing dictionary) must reject via
+    // 'close', not crash the whole server with an unhandled EPIPE.
+    proc.stdin.on('error', () => {});
+    // '^' makes hunspell check the rest of the line as text, never as a pipe
+    // command: "*word" would add a word to the dictionary and "#" would save
+    // that personal dictionary to disk for every later check.
+    proc.stdin.end(words.map((w) => '^' + w.replace(/[\r\n]+/g, ' ')).join('\n') + '\n');
   });
 }
 
+export async function hunspellWords(words: string[], lang: HunspellLang = 'nl'): Promise<Map<string, HunspellResult>> {
+  const results = new Map<string, HunspellResult>();
+  if (words.length === 0) return results;
+
+  const unique = [...new Set(words)];
+  const blocks = await hunspellBlocks(unique, lang, '-a');
+  for (let i = 0; i < unique.length; i++) {
+    const word = unique[i];
+    const suggestions: string[] = [];
+    let correct = true;
+    for (const line of blocks[i]) {
+      if (line.startsWith('*') || line.startsWith('+')) continue;
+      correct = false;
+      if (line.startsWith('&')) {
+        const m = line.match(/^& (\S+) (\d+) \d+: (.*)$/);
+        for (const s of (m?.[3] ?? '').split(', ')) {
+          if (s && !suggestions.includes(s)) suggestions.push(s);
+        }
+      }
+      // '#'-lines: unknown without suggestions, nothing to collect.
+    }
+    results.set(word, { word, correct, suggestions: suggestions.slice(0, 8) });
+  }
+  return results;
+}
+
 /** Bundled asset path first, system dictionaries as fallbacks (ADR 001). */
-export function resolveDict(lang: 'nl' | 'en_US'): string {
+export function resolveDict(lang: HunspellLang): string {
   const candidates = [
     path.join(__dirname, '..', 'assets', lang),
     path.join(process.cwd(), 'assets', lang),

@@ -84,6 +84,17 @@ describe('britticism detector', () => {
     assert.ok(whilst);
   });
 
+  it('builds correct US forms for fulfil, nappies, and mobile phones', () => {
+    const map = new Map(findBritticisms('We fulfil and fulfils; fulfilment. Nappies, mobile phones.').map((h) => [h.matched, h.american]));
+    assert.equal(map.get('fulfil'), 'fulfill');
+    assert.equal(map.get('fulfils'), 'fulfills');
+    assert.equal(map.get('fulfilment'), 'fulfillment');
+    assert.equal(map.get('Nappies'), 'diapers');
+    assert.equal(map.get('mobile phones'), 'cell phones');
+    // fulfilled/fulfilling are already US spellings
+    assert.deepEqual(findBritticisms('Orders fulfilled, fulfilling more.'), []);
+  });
+
   it('does not false-positive on US words containing British substrings', () => {
     const hits = findBritticisms('The historian analyzed the center of the organization.');
     assert.equal(hits.length, 0);

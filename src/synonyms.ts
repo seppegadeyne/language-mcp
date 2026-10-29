@@ -23,23 +23,20 @@ function loadTable(): Map<string, string[]> {
     join(__dirname, '..', 'assets', 'synonyms', 'nl-synonyms.tsv'),
     join(process.cwd(), 'assets', 'synonyms', 'nl-synonyms.tsv'),
   ];
-  let file: string | null = null;
-  for (const c of candidates) {
-    try {
-      readFileSync(c);
-      file = c;
-      break;
-    } catch {
-      // try next
-    }
-  }
   const map = new Map<string, string[]>();
-  if (file) {
-    for (const line of readFileSync(file, 'utf8').split('\n')) {
+  for (const file of candidates) {
+    let raw: string;
+    try {
+      raw = readFileSync(file, 'utf8');
+    } catch {
+      continue; // try next; a missing table only means no suggestions
+    }
+    for (const line of raw.split('\n')) {
       const tab = line.indexOf('\t');
       if (tab <= 0) continue;
       map.set(line.slice(0, tab), line.slice(tab + 1).split(','));
     }
+    break;
   }
   table = map;
   return map;

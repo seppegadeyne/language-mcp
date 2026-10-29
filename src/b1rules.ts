@@ -134,7 +134,8 @@ const NOMINALIZATION_ALLOW = new Set([
 // ---------------------------------------------------------------------------
 // Voice consistency: Dutch web default is je/jij (configurable to u).
 // ---------------------------------------------------------------------------
-const U_FORMS = /\b(u|uw|ue)\b/g;
+// Capital U/Uw at a sentence start counts too; "U-bocht" does not.
+const U_FORMS = /\b(?:[uU]w?|ue)\b(?!-)/g;
 const JE_FORMS = /\b(je|jij|jouw|jullie|jullie\u2019s)\b/gi;
 
 export interface B1Hit {
@@ -221,8 +222,6 @@ export function analyzeVoice(text: string, expected: 'je' | 'u' = 'je'): VoiceRe
   let m: RegExpExecArray | null;
   const uRe = new RegExp(U_FORMS.source, 'g');
   while ((m = uRe.exec(text)) !== null) {
-    // Skip "u" inside all-caps acronyms is not needed (\b handles); but avoid
-    // matching the Dutch word "u" in quotations is out of scope here.
     uCount++;
     if (uFirstIndex === null) uFirstIndex = m.index;
   }

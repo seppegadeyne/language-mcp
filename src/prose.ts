@@ -124,7 +124,9 @@ export function splitSentences(protectedText: string): Array<{ text: string; sta
       if (re.lastIndex === m.index) re.lastIndex++;
       continue;
     }
-    out.push({ text: raw.trim(), start: m.index, end: m.index + raw.length });
+    // Start at the first visible character, so reported positions point at the sentence.
+    const start = m.index + raw.length - raw.trimStart().length;
+    out.push({ text: raw.trim(), start, end: m.index + raw.length });
     if (re.lastIndex === m.index) re.lastIndex++;
   }
   return out;

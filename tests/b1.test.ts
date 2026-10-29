@@ -180,6 +180,9 @@ describe('b1 rules', () => {
     assert.ok(mixed.mixed);
     assert.ok(mixed.uCount >= 1);
     assert.ok(mixed.jeCount >= 1);
+    const capitalU = analyzeVoice('U kunt hier betalen. Je krijgt een bon. Neem de U-bocht.');
+    assert.equal(capitalU.uCount, 1);
+    assert.ok(capitalU.mixed);
     const jeOnly = analyzeVoice('Je kunt dit doen als je wilt.');
     assert.equal(jeOnly.mixed, false);
   });

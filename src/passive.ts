@@ -14,14 +14,13 @@
  *   verdicts.
  *
  * Detection heuristic per sentence:
- *   wordt/worden/word/werd/werden + VBpe word within 5 tokens = word-passive
+ *   wordt/worden/word/werd/werden + VBpe word later in the sentence = word-passive
  *   (high confidence); is/zijn/ben/bent/was/waren + VBpe within 3 tokens =
  *   zijn-passive (low confidence: ambiguity with perfect tense); a following
  *   "door"/"van" agent reinforces the hit.
  */
 
-import { spawn } from 'node:child_process';
-import { resolveDict, utf8SpawnEnv } from './hunspell.js';
+import { hunspellBlocks, type HunspellLang } from './hunspell.js';
 import { countSyllables } from './syllables.js';
 import type { Sentence } from './prose.js';
 
@@ -37,7 +36,6 @@ export interface PassiveHit {
 
 const WORD_AUX = new Set(['wordt', 'worden', 'word', 'werd', 'werden']);
 const ZIJN_AUX = new Set(['is', 'zijn', 'ben', 'bent', 'was', 'waren']);
-const WORD_WINDOW = 5;
 const ZIJN_WINDOW = 3;
 
 /**
@@ -57,92 +55,29 @@ export interface MorphInfo {
   stems: string[]; // all st: stems in the analysis block
 }
 
-export async function hunspellMorph(words: string[], lang: 'nl' | 'en_US' = 'nl'): Promise<Map<string, MorphInfo>> {
+export async function hunspellMorph(words: string[], lang: HunspellLang = 'nl'): Promise<Map<string, MorphInfo>> {
   const result = new Map<string, MorphInfo>();
   const unique = [...new Set(words.filter((w) => w.length > 0 && !/[-\s]/.test(w)))];
   if (unique.length === 0) return result;
-  const input = unique.join('\n') + '\n';
-
-  return await new Promise<Map<string, MorphInfo>>((resolve, reject) => {
-    const proc = spawn('hunspell', ['-d', resolveDict(lang), '-m'], {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: utf8SpawnEnv(),
-    });
-    let out = '';
-    const timer = setTimeout(() => {
-      proc.kill();
-      reject(new Error('hunspell -m timed out after 20s'));
-    }, 20_000);
-
-    proc.stdout.on('data', (d: Buffer) => (out += d.toString()));
-    proc.stderr.on('data', (d: Buffer) => (out += d.toString()));
-    proc.on('error', (e) => {
-      clearTimeout(timer);
-      reject(e);
-    });
-    proc.on('close', (code) => {
-      clearTimeout(timer);
-      if (code !== 0 && out.trim() === '') {
-        reject(new Error(`hunspell -m exited with ${code}`));
-        return;
+  const blocks = await hunspellBlocks(unique, lang, '-m');
+  for (let i = 0; i < unique.length; i++) {
+    const word = unique[i];
+    const tags = new Set<string>();
+    const flags = new Set<string>();
+    const stems: string[] = [];
+    let ownSt = false;
+    for (const line of blocks[i]) {
+      for (const tag of line.match(/ts:(\w+)/g) ?? []) tags.add(tag.slice(3));
+      for (const f of line.match(/fl:(\w+)/g) ?? []) flags.add(f.slice(3));
+      for (const st of line.match(/st:([^\s]+)/g) ?? []) stems.push(st.slice(3));
+      // Bare lemma echo: "gemaakt  st:gemaakt" (no ts: tag).
+      if (new RegExp(`^${escapeRe(word)}\\s+st:${escapeRe(word)}\\s*$`).test(line)) {
+        ownSt = true;
       }
-      const rawLines = out
-        .split('\n')
-        .map((l) => l.replace(/\r$/, ''))
-        .filter((l) => !l.startsWith('@(#)'));
-
-      // Group per-word blocks on empty separator lines (same as -a mode).
-      const blocks: string[][] = [];
-      let current: string[] = [];
-      for (const line of rawLines) {
-        if (line.length === 0) {
-          if (current.length > 0) {
-            blocks.push(current);
-            current = [];
-          }
-        } else {
-          current.push(line);
-        }
-      }
-      if (current.length > 0) blocks.push(current);
-
-      if (blocks.length !== unique.length) {
-        reject(
-          new Error(`hunspell -m response count mismatch: ${blocks.length} blocks for ${unique.length} words`)
-        );
-        return;
-      }
-      for (let i = 0; i < unique.length; i++) {
-        const word = unique[i];
-        const tags = new Set<string>();
-        const flags = new Set<string>();
-        const stems: string[] = [];
-        let ownSt = false;
-        for (const line of blocks[i]) {
-          const found = line.match(/ts:(\w+)/g);
-          if (found) {
-            for (const tag of found) tags.add(tag.slice(3));
-          }
-          const fl = line.match(/fl:(\w+)/g);
-          if (fl) {
-            for (const f of fl) flags.add(f.slice(3));
-          }
-          const stemMatches = line.match(/st:([^\s]+)/g);
-          if (stemMatches) {
-            for (const s of stemMatches) stems.push(s.slice(3));
-          }
-          // Bare lemma echo: "gemaakt  st:gemaakt" (no ts: tag).
-          if (new RegExp(`^${escapeRe(word)}\\s+st:${escapeRe(word)}\\s*$`).test(line)) {
-            ownSt = true;
-          }
-        }
-        result.set(word, { tags, flags, ownSt, stems });
-      }
-      resolve(result);
-    });
-    proc.stdin.write(input);
-    proc.stdin.end();
-  });
+    }
+    result.set(word, { tags, flags, ownSt, stems });
+  }
+  return result;
 }
 
 function escapeRe(s: string): string {

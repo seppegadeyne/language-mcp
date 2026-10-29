@@ -138,13 +138,15 @@ function protectText(text: string, terms: string[]): string {
   t = t.replace(/\b[\w.+-]+@[\w-]+\.[\w.-]+\b/g, mask);
   t = t.replace(new RegExp(BARE_DOMAIN_RE.source, 'gi'), mask);
   // Preserve link labels as prose, but never check destinations or titles.
-  t = t.replace(/\]\([^\n)]*\)/g, mask);
+  // shortcut: spans are capped (2000/1000 chars) so unclosed openers cannot scan
+  // quadratically; longer link targets or emphasis lines stay unprotected.
+  t = t.replace(/\]\([^\n)]{0,2000}\)/g, mask);
   t = t.replace(/^ {0,3}\[[^\]\n]+\]:[^\n]*/gm, mask);
   // Marked titles and quotations are conservatively excluded, not rewritten.
   t = t.replace(/"[^"\n]*"|“[^”\n]*”|„[^”“\n]*[”“]|”[^”\n]*”|«[^»\n]*»|‹[^›\n]*›/g, mask);
   t = t.replace(/(?<![\p{L}\p{N}])[‘‚](?![stn][ \t\u00a0])[^’‘\n]*’(?![\p{L}\p{N}])/gu, mask);
   t = t.replace(/(?<![\p{L}\p{N}])'(?![stn][ \t\u00a0])[^'\n]+'(?![\p{L}\p{N}])/gu, mask);
-  t = t.replace(/(?<![\p{L}\p{N}_*])(\*{1,2}|_{1,2})(?=\S)[^\n]*?\S\1(?![\p{L}\p{N}_*])/gu, mask);
+  t = t.replace(/(?<![\p{L}\p{N}_*])(\*{1,2}|_{1,2})(?=\S)[^\n]{0,1000}?\S\1(?![\p{L}\p{N}_*])/gu, mask);
   for (const term of terms) {
     const words = term.trim().split(/[ \t\u00a0]+/);
     if (words[0]) t = t.replace(bounded(words.map(escapeRe).join(SPACE)), mask);

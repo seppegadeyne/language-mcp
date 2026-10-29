@@ -62,6 +62,15 @@ describe('Dutch spelling review regressions', () => {
     assert.ok(performance.now() - start < 2000, 'An 80 KB input should not block the event loop for seconds');
   });
 
+  it('handles unclosed emphasis and link openers without quadratic scanning', () => {
+    for (const unit of [' _a', ' *a', ' ](a']) {
+      const text = unit.repeat(30000) + '\nkeuken tafel';
+      const start = performance.now();
+      assert.deepEqual(matches(text), ['keuken tafel']);
+      assert.ok(performance.now() - start < 2000, `${JSON.stringify(unit)} input took too long`);
+    }
+  });
+
   it('does not treat a same-line backtick span as an unclosed fence', () => {
     const text = '```npm test``` draait alle tests.\nEr staat een keuken tafel.\nWe komen op Maandag.';
     assert.deepEqual(matches(text), ['keuken tafel', 'Maandag']);

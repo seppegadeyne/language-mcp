@@ -1,9 +1,9 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { hunspellWords } from './hunspell.js';
+import { hunspellWords, type HunspellResult } from './hunspell.js';
 import { MolexClient } from './molex.js';
-import { extractWords, scanWords, MAX_SPELL_WORDS } from './tokenize.js';
+import { extractWords, scanWords, MAX_SPELL_WORDS, type Token } from './tokenize.js';
 import { findBritticisms } from './britticisms.js';
 import { findDutchSpellingIssues } from './dutch-spelling.js';
 import { analyzeProse, wordTokens } from './prose.js';
@@ -45,23 +45,7 @@ server.tool(
     const words = tokens.map((t) => t.clean);
     const results = await hunspellWords(words, 'en_US');
 
-    const seen = new Map<string, { suggestions: string[]; count: number; first_index: number }>();
-    for (let i = 0; i < tokens.length; i++) {
-      const r = results.get(tokens[i].clean);
-      if (r && !r.correct) {
-        const entry =
-          seen.get(tokens[i].clean) ?? {
-            suggestions: r.suggestions,
-            count: 0,
-            first_index: tokens[i].index,
-          };
-        entry.count++;
-        seen.set(tokens[i].clean, entry);
-      }
-    }
-    const flagged = [...seen.entries()]
-      .map(([word, e]) => ({ word, ...e }))
-      .sort((a, b) => b.count - a.count || a.word.localeCompare(b.word));
+    const flagged = unknownWords(tokens, results);
 
     const britts = findBritticisms(text);
     const britishWords = new Set(britts.map((b) => b.matched.toLowerCase()));
@@ -110,30 +94,7 @@ server.tool(
     const { tokens, truncatedAt } = scanWords(text);
     const words = tokens.map((t) => t.clean);
     const results = await hunspellWords(words);
-    const flagged: Array<{
-      word: string;
-      suggestions: string[];
-      count: number;
-      first_index: number;
-    }> = [];
-
-    const seen = new Map<string, { suggestions: string[]; count: number; first_index: number }>();
-    for (let i = 0; i < tokens.length; i++) {
-      const r = results.get(tokens[i].clean);
-      if (r && !r.correct) {
-        const entry = seen.get(tokens[i].clean) ?? {
-          suggestions: r.suggestions,
-          count: 0,
-          first_index: tokens[i].index,
-        };
-        entry.count++;
-        seen.set(tokens[i].clean, entry);
-      }
-    }
-    for (const [word, e] of seen) {
-      flagged.push({ word, suggestions: e.suggestions, count: e.count, first_index: e.first_index });
-    }
-    flagged.sort((a, b) => b.count - a.count || a.word.localeCompare(b.word));
+    const flagged = unknownWords(tokens, results);
 
     const rules = findDutchSpellingIssues(text, { protectedTerms: protected_terms });
     const totalWords = tokens.length;
@@ -491,6 +452,19 @@ function spellLimitNote(lines: string[], truncatedAt: number | null): CheckResul
   if (truncatedAt === null) return { content: [{ type: 'text', text: lines.join('\n') }] };
   lines.splice(1, 0, `INCOMPLETE: spelling stopped after ${MAX_SPELL_WORDS} words; text from position ${truncatedAt} on was NOT spell-checked. Split the input into ranges and check each one.`);
   return { content: [{ type: 'text', text: lines.join('\n') }], isError: true };
+}
+
+/** Unknown words from a spell check: one entry per word, most frequent first. */
+function unknownWords(tokens: Token[], results: Map<string, HunspellResult>) {
+  const seen = new Map<string, { word: string; suggestions: string[]; count: number; first_index: number }>();
+  for (const t of tokens) {
+    const r = results.get(t.clean);
+    if (!r || r.correct) continue;
+    const entry = seen.get(t.clean) ?? { word: t.clean, suggestions: r.suggestions, count: 0, first_index: t.index };
+    entry.count++;
+    seen.set(t.clean, entry);
+  }
+  return [...seen.values()].sort((a, b) => b.count - a.count || a.word.localeCompare(b.word));
 }
 
 function truncate(s: string, n: number): string {
