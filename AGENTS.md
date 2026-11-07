@@ -100,6 +100,7 @@ Guidelines for AI agents (Hermes, etc.) working in this repository.
 
 - TypeScript, Node 18+. Tests: `npx tsx --test tests/*.test.ts` (node:test + assert).
 - Build: `npx tsc -p tsconfig.json` → `dist/cli.js`.
+- Read CONSTRAINTS.md before writing code. Never weaken it to make a change pass; tightening is fine.
 - Always run the build, tests, and a manual MCP smoke test (for example,
   `hermes mcp test language`) before reporting a change as complete.
 
