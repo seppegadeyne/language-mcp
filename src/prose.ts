@@ -13,7 +13,7 @@
  *   findings can be traced back exactly (never guess positions).
  */
 
-import { BARE_DOMAIN_RE } from './tokenize.js';
+import { BARE_DOMAIN_RE, EMAIL_RE } from './tokenize.js';
 
 export interface Sentence {
   text: string;
@@ -81,7 +81,7 @@ export function stripNonProse(text: string): string {
   t = t.replace(/```[\s\S]*?```/g, blanks);
   t = t.replace(/`[^`\n]*`/g, blanks);
   t = t.replace(/\b(?:https?:\/\/|www\.)\S+/gi, blanks);
-  t = t.replace(/\b[\w.+-]+@[\w-]+\.[\w.-]+\b/gi, blanks);
+  t = t.replace(new RegExp(EMAIL_RE.source, 'gi'), blanks);
   // Bare domain names without a protocol (Verhuurwinkel.nl), optionally with
   // a path; length-preserving like the other strips. Same pattern as the
   // spelling tokenizer, so both layers agree on what is prose.

@@ -6,13 +6,10 @@ import { findDutchSpellingIssues } from '../src/dutch-spelling.js';
 // variants and exceptions come from the pages recorded in docs/dutch-spelling.md.
 const PAIRS = [
   ['keuken tafel', 'keukentafel', 'nl-compound-spacing'],
-  ['keuken tafels', 'keukentafels', 'nl-compound-spacing'],
   ['contact formulier', 'contactformulier', 'nl-compound-spacing'],
   ['contact formulieren', 'contactformulieren', 'nl-compound-spacing'],
-  ['contact gegevens', 'contactgegevens', 'nl-compound-spacing'],
   ['privacy beleid', 'privacybeleid', 'nl-compound-spacing'],
   ['auto ongeluk', 'auto-ongeluk', 'nl-vowel-collision-hyphen'],
-  ['auto ongelukken', 'auto-ongelukken', 'nl-vowel-collision-hyphen'],
   ['ski instructeur', 'ski-instructeur', 'nl-vowel-collision-hyphen'],
   ['btw nummer', 'btw-nummer', 'nl-initialism-hyphen'],
   ['btw nummers', 'btw-nummers', 'nl-initialism-hyphen'],
@@ -46,6 +43,27 @@ describe('selected Dutch compound and hyphen rules', () => {
     for (const [, correct] of PAIRS) {
       assert.deepEqual(findDutchSpellingIssues(`We bespreken het ${correct} vandaag.`), [], correct);
     }
+  });
+
+  it('leaves a place or tool plus a plural object alone', () => {
+    for (const text of ['We zetten in de keuken tafels en stoelen neer.', 'Met de auto ongelukken veroorzaken is strafbaar.',
+      'Vraag bij het eerste contact gegevens op.']) {
+      assert.deepEqual(findDutchSpellingIssues(text), [], text);
+    }
+  });
+
+  it('leaves an inverted finite verb alone', () => {
+    for (const text of ['Voor de btw nummer je elke factuur doorlopend.', 'In de keuken tafel je gezellig samen.']) {
+      assert.deepEqual(findDutchSpellingIssues(text), [], text);
+    }
+  });
+
+  it('suggests the listed casing for initialisms and skips all-caps typography', () => {
+    const suggestion = (text: string) => findDutchSpellingIssues(text).map((h) => h.suggestion);
+    assert.deepEqual(suggestion('De it afdeling koopt een ai tool en een 3d printer.'), ['IT-afdeling', 'AI-tool', '3D-printer']);
+    assert.deepEqual(suggestion('Een MP3 speler.'), ['mp3-speler']);
+    assert.deepEqual(suggestion('Uw BTW nummer.'), ['BTW-nummer']);
+    assert.deepEqual(suggestion('KEUKEN tafel te koop.'), []);
   });
 
   it('preserves sentence-initial capitalization', () => {

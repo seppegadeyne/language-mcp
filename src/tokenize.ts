@@ -16,12 +16,15 @@ export interface Token {
 }
 
 const URL_RE = /\b(?:https?:\/\/|www\.)\S+/gi;
-const EMAIL_RE = /\b[\w.+-]+@[\w-]+\.[\w.-]+\b/gi;
+// Lookbehinds anchor each match at the start of its run: with a bare \b the
+// engine retried from every position of a long "a.a.a." or "a-a-a-" run
+// (quadratic; seconds on 80 KB).
+export const EMAIL_RE = /(?<![\w.+-])[\w.+-]+@[\w-]+\.[\w.-]+\b/gi;
 // Bare domain names without a protocol (Verhuurwinkel.nl, example.com/beamers)
 // so their TLD is not flagged as an unknown word. The \b after the TLD keeps
 // "this.common" from matching as "this.com". Shared with src/prose.ts.
 export const BARE_DOMAIN_RE =
-  /\b[\w-]+\.(?:nl|com|be|eu|org|net|info|biz|io|ai|dev|app|co|uk|de|fr|edu|gov)\b(?:\/\S*)?/gi;
+  /(?<![\w-])[\w-]+\.(?:nl|com|be|eu|org|net|info|biz|io|ai|dev|app|co|uk|de|fr|edu|gov)\b(?:\/\S*)?/gi;
 
 const blanks = (m: string) => ' '.repeat(m.length);
 

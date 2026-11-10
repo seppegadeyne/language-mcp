@@ -1,6 +1,6 @@
 {
   "name": "language-mcp",
-  "version": "0.10.1",
+  "version": "0.11.0",
   "description": "Local MCP server for Dutch, US English, and French spelling and plain-language checks, and Dutch word details.",
   "main": "dist/cli.js",
   "directories": {

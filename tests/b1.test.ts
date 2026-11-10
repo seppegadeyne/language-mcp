@@ -147,6 +147,16 @@ describe('readability', () => {
     assert.equal(sentences.reduce((n, s) => n + s.words.length, 0), 6);
   });
 
+  it('does not count a time or a dotted abbreviation as the pronoun u', () => {
+    const v = analyzeVoice('Open van 9 u tot 17 u, m.u.v. zondag, a.u.b. Wij bellen u. U kunt uw pas tonen.', 'je');
+    assert.equal(v.uCount, 3);
+  });
+
+  it('does not flag the adjective betreffende, and flags inflected jargon', () => {
+    const hits = findB1Hits('De betreffende medewerker. Betreffende uw vraag: een krachtige en expliciete tekst.');
+    assert.deepEqual(hits.map((h) => h.matched), ['Betreffende', 'krachtige', 'expliciete']);
+  });
+
   it('counts the one-letter pronoun "u" as a word', () => {
     const { sentences } = analyzeProse('Als u een aanvraag doet, krijgt u bericht.');
     assert.equal(sentences[0].words.length, 8);

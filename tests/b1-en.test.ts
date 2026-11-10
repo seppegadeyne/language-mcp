@@ -101,6 +101,14 @@ describe('English readability', () => {
     assert.deepEqual((await detectPassivesEn(sentences)).map((h) => h.participle), ['signed']);
   });
 
+  it('leaves plain constructions and questions alone', () => {
+    const hits = findB1HitsEn('Use short words rather than long ones. Write clearly. Does the application work offline? Did your payment fail?');
+    assert.deepEqual(hits.map((h) => h.matched), []);
+    assert.deepEqual(findB1HitsEn('Clearly, this works. It is rather long.').map((h) => h.matched), ['Clearly', 'rather']);
+    const address = analyzeAddressEn('No one can do it. Our team members help. Members get a discount.', 'you');
+    assert.deepEqual(address.readerTop, [{ word: 'members', count: 1 }]);
+  });
+
   it('counts one-letter words (a, I) as words', () => {
     const { sentences } = analyzeProse('I saw a cat. It is a pet I like.', 'en');
     assert.deepEqual(sentences.map((s) => s.words.length), [4, 6]);

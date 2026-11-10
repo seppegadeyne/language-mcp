@@ -21,7 +21,7 @@ Last reviewed: 2026-11-10
 |---|---|---|---|
 | Suppressions | 0 | must not grow | `git grep -nE "@ts-ignore|@ts-expect-error|eslint-disable|biome-ignore|# noqa|# type: ignore|phpcs:ignore" -- ':!node_modules' ':!vendor' ':!dist' ':!*.min.js' ':!package-lock.json' | wc -l` |
 | Skipped tests | 0 | must not grow | `git grep -nE "\.skip\(|\bxit\(|@pytest\.mark\.skip" -- ':!node_modules' ':!dist' | wc -l` |
-| Tests passing | 254 | must not fall | `npm test | grep -E '^ℹ pass'` |
+| Tests passing | 262 | must not fall | `npm test | grep -E '^ℹ pass'` |
 
 ## Exceptions
 | ID | Rule | Path | Reason | Expires |

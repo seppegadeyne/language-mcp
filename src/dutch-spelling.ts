@@ -1,4 +1,4 @@
-import { BARE_DOMAIN_RE } from './tokenize.js';
+import { BARE_DOMAIN_RE, EMAIL_RE } from './tokenize.js';
 
 /** Selected spelling rules, not a grammar checker or an automatic rewrite. */
 export interface DutchSpellingIssue {
@@ -67,15 +67,15 @@ const CALENDAR = rule(
 // Deliberately closed pairs: dictionary membership alone does not distinguish
 // a compound from an accepted word group. Exclude ambiguous verb forms
 // ("offerte aanvraag", "menu uitdraai") and double objects ("klanten service").
+// Plurals without an article can be a place or tool plus an object ("in de
+// keuken tafels neerzetten", "met de auto ongelukken veroorzaken", "bij het
+// eerste contact gegevens opvragen"), so those pairs are left out.
 const PAIRS: Array<[string, string, Rule]> = [
   ['keuken tafel', 'keukentafel', COMPOUND],
-  ['keuken tafels', 'keukentafels', COMPOUND],
   ['contact formulier', 'contactformulier', COMPOUND],
   ['contact formulieren', 'contactformulieren', COMPOUND],
-  ['contact gegevens', 'contactgegevens', COMPOUND],
   ['privacy beleid', 'privacybeleid', COMPOUND],
   ['auto ongeluk', 'auto-ongeluk', VOWEL],
-  ['auto ongelukken', 'auto-ongelukken', VOWEL],
   ['ski instructeur', 'ski-instructeur', VOWEL],
   ['btw nummer', 'btw-nummer', INITIALISM],
   ['btw nummers', 'btw-nummers', INITIALISM],
@@ -133,9 +133,9 @@ function protectText(text: string, terms: string[]): string {
   t = t.replace(/<(h[1-6]|pre|code|script|style|title|cite|q|em|i)\b[^>]*>[^]*?<\/\1\s*>/gi, mask);
   t = t.replace(/<[A-Za-z!/?][^<>]*>/g, mask);
   t = t.replace(/^ {0,3}#{1,6}(?:[ \t]+|$)[^\n]*/gm, mask);
-  t = t.replace(/^[^\n]+\r?\n {0,3}(?:={3,}|-{3,})[ \t]*\r?$/gm, mask);
+  t = t.replace(/^[^\n]+\r?\n {0,3}(?:=+|-+)[ \t]*\r?$/gm, mask);
   t = t.replace(/\b(?:https?:\/\/|www\.)\S+/gi, mask);
-  t = t.replace(/\b[\w.+-]+@[\w-]+\.[\w.-]+\b/g, mask);
+  t = t.replace(new RegExp(EMAIL_RE.source, 'g'), mask);
   t = t.replace(new RegExp(BARE_DOMAIN_RE.source, 'gi'), mask);
   // Preserve link labels as prose, but never check destinations or titles.
   // shortcut: spans are capped (2000/1000 chars) so unclosed openers cannot scan
@@ -143,8 +143,10 @@ function protectText(text: string, terms: string[]): string {
   t = t.replace(/\]\([^\n)]{0,2000}\)/g, mask);
   t = t.replace(/^ {0,3}\[[^\]\n]+\]:[^\n]*/gm, mask);
   // Marked titles and quotations are conservatively excluded, not rewritten.
-  t = t.replace(/"[^"\n]*"|“[^”\n]*”|„[^”“\n]*[”“]|”[^”\n]*”|«[^»\n]*»|‹[^›\n]*›/g, mask);
-  t = t.replace(/(?<![\p{L}\p{N}])[‘‚](?![stn][ \t\u00a0])[^’‘\n]*’(?![\p{L}\p{N}])/gu, mask);
+  // A body never contains its own opening mark: an unclosed opener then fails
+  // at the next opener instead of scanning the rest of the line each time.
+  t = t.replace(/"[^"\n]*"|“[^“”\n]*”|„[^„”“\n]*[”“]|”[^”\n]*”|«[^«»\n]*»|‹[^‹›\n]*›/g, mask);
+  t = t.replace(/(?<![\p{L}\p{N}])[‘‚](?![stn][ \t\u00a0])[^’‘‚\n]*’(?![\p{L}\p{N}])/gu, mask);
   t = t.replace(/(?<![\p{L}\p{N}])'(?![stn][ \t\u00a0])[^'\n]+'(?![\p{L}\p{N}])/gu, mask);
   t = t.replace(/(?<![\p{L}\p{N}_*])(\*{1,2}|_{1,2})(?=\S)[^\n]{0,1000}?\S\1(?![\p{L}\p{N}_*])/gu, mask);
   for (const term of terms) {
@@ -164,7 +166,19 @@ export function findDutchSpellingIssues(text: string, options: DutchSpellingOpti
       const parts = m[0].split(/[ \t\u00a0]+/);
       // Internal capitals may identify a business or title ("Keuken Tafel").
       if (parts.slice(1).some((part) => /\p{Lu}/u.test(part))) continue;
-      const suggestion = parts[0] + correct.slice(parts[0].length);
+      // An inverted finite verb, not a compound: "nummer je", "tafel je".
+      if (/^[ \t\u00a0]+(?:je|jij|ik|we|wij)(?![\p{L}\p{N}])/u.test(t.slice(m.index + m[0].length, m.index + m[0].length + 8))) continue;
+      const first = wrong.split(' ')[0];
+      let suggestion: string;
+      if (parts[0] === first || /[\p{Lu}\p{N}]/u.test(first)) {
+        suggestion = correct; // listed spelling, also for "ai tool" and "3d printer"
+      } else if (parts[0] === first[0].toUpperCase() + first.slice(1)) {
+        suggestion = correct[0].toUpperCase() + correct.slice(1); // sentence start
+      } else if (definition === INITIALISM) {
+        suggestion = parts[0] + correct.slice(parts[0].length); // "BTW nummer"
+      } else {
+        continue; // other capitals are typography ("KEUKEN tafel")
+      }
       hits.push({ ...definition, matched: text.slice(m.index, m.index + m[0].length),
         suggestion, index: m.index, end: m.index + m[0].length });
     }
@@ -179,13 +193,14 @@ export function findDutchSpellingIssues(text: string, options: DutchSpellingOpti
     // Thus "Mei belt" and "werken bij Maandag" are left alone by default.
     const cue = weekdayRe.test(m[0])
       ? '(?:op|vanaf|tot|sinds|elke|iedere|volgende|vorige|komende|aanstaande|afgelopen|deze)'
-      : '(?:in|vanaf|tot|sinds|volgende|vorige|komende|aanstaande|afgelopen|deze|(?:0?[1-9]|[12][0-9]|3[01]))';
+      : '(?:in|vanaf|tot|sinds|volgende|vorige|komende|aanstaande|afgelopen|deze|(?<![.,])(?:0?[1-9]|[12][0-9]|3[01]))';
     const cueMatch = new RegExp(`(?<!${WORD_EDGE})(${cue})${SPACE}$`, 'iu').exec(before);
     if (!cueMatch) continue;
     if (/\p{Lu}/u.test(cueMatch[1])) {
       const prefix = t.slice(0, m.index - before.length + cueMatch.index);
       // An internal capital may belong to a name ("Elke Maandag") or title.
-      if (!/(?:^|[.!?\n])[ \t\u00a0]*(?:[-*+>|][ \t]*|\d+[.)][ \t]*)?$/.test(prefix)) continue;
+      // The dot of a title abbreviation ("dr. Elke Maandag") is no sentence end.
+      if (!/(?:^|(?<!(?:^|[^\p{L}])(?:dr|drs|mr|mw|mevr|dhr|prof|ir|ing))\.|[!?\n])[ \t\u00a0]*(?:[-*+>|][ \t]*|\d+[.)][ \t]*)?$/u.test(prefix)) continue;
     }
     hits.push({ ...CALENDAR, matched: m[0], suggestion: m[0].toLowerCase(),
       index: m.index, end: m.index + m[0].length });

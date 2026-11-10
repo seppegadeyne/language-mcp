@@ -90,6 +90,9 @@ Guidelines for AI agents (Hermes, etc.) working in this repository.
   quotation variants, malformed markup, and Unicode-aware word boundaries.
 - Every finding needs a stable rule ID, an original English explanation,
   original UTF-16 start/end offsets, confidence, and precise source metadata.
+- `protected_terms` has one contract in the three spelling tools
+  (`spellTokens` in `src/server.ts`): words fully inside an occurrence are not
+  reported, and the count of skipped words is. It is not a general whitelist.
 - Calendar homographs require explicit time cues. Preserve marked titles,
   quoted text, and caller-supplied case-sensitive `protected_terms`. Do not
   claim universal proper-name recognition or general grammar checking.

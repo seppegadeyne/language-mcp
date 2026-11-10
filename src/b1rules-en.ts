@@ -122,7 +122,8 @@ const WORDY_RULES: B1Rule[] = [
 // Hidden verbs: a weak verb + nominalization where one strong verb works
 // (plainlanguage.gov "Use verbs, not nouns").
 // ---------------------------------------------------------------------------
-const LIGHT = '(?:make|makes|made|making|conduct|conducts|conducted|conducting|perform|performs|performed|performing|carry out|carries out|carried out|carrying out|undertake|undertakes|undertook|undertaken|do|does|did|done|doing)';
+const LIGHT = '(?:make|makes|made|making|conduct|conducts|conducted|conducting|perform|performs|performed|performing|carry out|carries out|carried out|carrying out|undertake|undertakes|undertook|undertaken)';
+// No do-forms: "Does the application work?" and "Did your payment fail?" are questions.
 const GIVE = '(?:give|gives|gave|given|giving|provide|provides|provided|providing|offer|offers|offered|offering)';
 const TAKE = '(?:take|takes|took|taken|taking)';
 const REACH = '(?:reach|reaches|reached|reaching|come to|comes to|came to|coming to)';
@@ -181,13 +182,14 @@ const FILLER_RULES: B1Rule[] = [
   { re: /\bessentially\b/gi, plain: '(remove)' },
   { re: /\bliterally\b/gi, plain: '(remove)' },
   { re: /\bactually\b/gi, plain: '(remove)' },
-  { re: /\bobviously\b|\bclearly\b/gi, plain: '(remove)', note: 'if it is obvious, readers do not need to be told' },
+  // "clearly" only as a sentence opener: "write clearly" is a manner adverb.
+  { re: /\bobviously\b|(?<=^|[.!?]\s+)clearly\b(?=,)/gi, plain: '(remove)', note: 'if it is obvious, readers do not need to be told' },
   { re: /\bneedless to say\b/gi, plain: '(remove)' },
   { re: /\bas a matter of fact\b/gi, plain: 'in fact, (remove)' },
   { re: /\bfor all intents and purposes\b/gi, plain: 'in effect, (remove)' },
   { re: /\bvery (?:unique|important|essential|critical)\b/gi, plain: '(drop "very")' },
   { re: /\breally\b/gi, plain: '(remove)', note: 'judge in context' },
-  { re: /\bquite\b|\brather\b|\bsomewhat\b/gi, plain: '(remove or be specific)', note: 'judge in context' },
+  { re: /\bquite\b|\brather\b(?! than\b)|\bsomewhat\b/gi, plain: '(remove or be specific)', note: 'judge in context' },
   { re: /\bin terms of\b/gi, plain: 'for, about, in', note: 'often removable' },
   { re: /\bthe fact that\b/gi, plain: 'that, (rewrite)' },
 ];
@@ -257,6 +259,9 @@ const NOMINALIZATION_ALLOW = new Set([
   'reservations', 'invitation', 'celebration', 'destination', 'decoration',
   'decorations', 'installation', 'collection', 'collections', 'selection',
   'connection', 'question', 'application', 'applications', 'conversation',
+  'enhance', 'advance', 'advances', 'implement', 'implements', 'supplement',
+  'supplements', 'complement', 'basement', 'pavement', 'parliament',
+  'performance', 'maintenance', 'appearance', 'reference', 'references',
   'conversations', 'presentation', 'presentations', 'organization',
   'organizations', 'quotation', 'quotations', 'notification', 'notifications',
 ]);
@@ -282,7 +287,7 @@ export interface AddressReportEn {
 // address the user as "you").
 const YOU_FORMS = /\b(?:you|your|yours|yourself|yourselves|you['’](?:re|ve|ll|d))\b/gi;
 const READER_REFS =
-  /\b(?:the (?:user|customer|client|visitor|applicant|reader|member|participant|recipient|buyer|guest)s?|(?:users|customers|clients|visitors|applicants|readers|members|participants|recipients|buyers|guests)|one (?:must|should|can|may))\b/gi;
+  /\b(?:the (?:user|customer|client|visitor|applicant|reader|member|participant|recipient|buyer|guest)s?|(?:users|customers|clients|visitors|applicants|readers|(?<!\b(?:team|staff|board|family|crew) )members|participants|recipients|buyers|guests)|(?<!\b(?:no|any|each|every|this|that|which|the) )one (?:must|should|can|may))\b/gi;
 
 export function findB1HitsEn(text: string): B1HitEn[] {
   const hits: B1HitEn[] = [];

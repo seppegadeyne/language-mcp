@@ -31,6 +31,12 @@ describe('Dutch spelling review regressions', () => {
     }
   });
 
+  it('does not read a name after a title abbreviation or a decimal as a calendar cue', () => {
+    for (const text of ['Ik sprak met dr. Elke Maandag.', 'Versie 2.5 April is uit.', 'Kop op Maandag\n-\nTekst.']) {
+      assert.deepEqual(matches(text), [], text);
+    }
+  });
+
   it('still recognizes sentence-initial and list-initial calendar cues', () => {
     for (const text of ['Tot Maandag!', 'Op Maandag openen we.', 'Het gaat door. Elke Maandag open.',
       '- Elke Maandag open', '1. Elke Maandag open', '> Elke Maandag open']) {
@@ -63,7 +69,7 @@ describe('Dutch spelling review regressions', () => {
   });
 
   it('handles unclosed emphasis and link openers without quadratic scanning', () => {
-    for (const unit of [' _a', ' *a', ' ](a']) {
+    for (const unit of ['a.', 'a-', '„a', '“a', '«a', '‹a', ' ‚a', ' _a', ' *a', ' ](a']) {
       const text = unit.repeat(30000) + '\nkeuken tafel';
       const start = performance.now();
       assert.deepEqual(matches(text), ['keuken tafel']);

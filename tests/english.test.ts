@@ -95,6 +95,26 @@ describe('britticism detector', () => {
     assert.deepEqual(findBritticisms('Orders fulfilled, fulfilling more.'), []);
   });
 
+  it('leaves words alone that are ordinary US English in another sense', () => {
+    const text = 'The new checkout lifts conversion. Read our blog post about local SEO. We hired staff and brought up the issue. '
+      + 'Requests are queued. A crisp look, tax brackets, before the holiday season, open dialogue with clients. '
+      + 'Two analyses were run. Boot from an SD card. A flat roof on the building. It came to a full stop. Jumper cables.';
+    assert.deepEqual(findBritticisms(text).map((h) => h.matched), []);
+  });
+
+  it('builds real US words for inflected and phrase forms', () => {
+    const text = 'She catalogued it, manoeuvred the van into the car park, added to basket, two storeys, a flat to rent, car hire, the dialogue box, the telly.';
+    assert.deepEqual(findBritticisms(text).map((h) => `${h.matched}→${h.american}`), [
+      'catalogued→cataloged', 'dialogue box→dialog box', 'manoeuvred→maneuvered', 'storeys→stories', 'added to basket→added to cart',
+      'flat to rent→apartment for rent', 'car park→parking lot', 'car hire→car rental', 'telly→TV',
+    ]);
+  });
+
+  it('skips matches inside a protected span before counting', () => {
+    const hits = findBritticisms('Whilst Labs opens whilst we wait.', (start) => start === 0);
+    assert.deepEqual(hits.map((h) => h.index), [18]);
+  });
+
   it('does not false-positive on US words containing British substrings', () => {
     const hits = findBritticisms('The historian analyzed the center of the organization.');
     assert.equal(hits.length, 0);

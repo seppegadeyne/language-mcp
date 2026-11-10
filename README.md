@@ -49,8 +49,11 @@ confidence, and a precise Team Taaladvies source link.
 
 The rule layer protects code, marked headings, quotations, and other selected
 non-prose spans. Pass optional `protected_terms` for exact case-sensitive names
-or unmarked titles; horizontal whitespace may vary. This protection does not
-whitelist Hunspell dictionary words.
+or unmarked titles; horizontal whitespace may vary. Words inside an occurrence
+of a protected term are also not reported as unknown (the same contract as in
+`check_us_english_text` and `check_french_text`); the same words elsewhere in
+the text are still checked. All three spelling tools take `protected_terms`
+since v0.11.0.
 Accepted variants such as `rode kool` / `rodekool`, optional clarity hyphens, and
 meaning-dependent word groups are not automatically joined or rewritten.
 

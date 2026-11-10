@@ -14,13 +14,15 @@ finding in context.
 
 | Rule ID | Selected examples | Confidence | Source |
 | --- | --- | --- | --- |
-| `nl-compound-spacing` | `keuken tafel` → `keukentafel`, `contact formulier` → `contactformulier`, `contact gegevens` → `contactgegevens`, `privacy beleid` → `privacybeleid` | High | [Compound rules, rule 2](https://www.vlaanderen.be/team-taaladvies/spellingregels/aaneenschrijven/aaneenschrijven-01-hoofdregels-los-of-aaneen-koppelteken-of-trema) |
+| `nl-compound-spacing` | `keuken tafel` → `keukentafel`, `contact formulier` → `contactformulier`, `privacy beleid` → `privacybeleid` | High | [Compound rules, rule 2](https://www.vlaanderen.be/team-taaladvies/spellingregels/aaneenschrijven/aaneenschrijven-01-hoofdregels-los-of-aaneen-koppelteken-of-trema) |
 | `nl-vowel-collision-hyphen` | `auto ongeluk` → `auto-ongeluk`, `ski instructeur` → `ski-instructeur` | High | [Vowel collisions, rule 1](https://www.vlaanderen.be/team-taaladvies/spellingregels/aaneenschrijven/aaneenschrijven-02-klinkerbotsing-koppelteken-of-trema) |
 | `nl-initialism-hyphen` | `btw nummer` → `btw-nummer`, `pc netwerk` → `pc-netwerk`, `tv programma` → `tv-programma`, `AI tool` → `AI-tool`, `IT afdeling` → `IT-afdeling`, `kmo bedrijf` → `kmo-bedrijf` | High | [Initialisms, rule 1](https://www.vlaanderen.be/team-taaladvies/spellingregels/aaneenschrijven/aaneenschrijven-09-combinaties-met-initiaalwoorden-letterwoorden-en-verkortingen) |
 | `nl-number-letter-hyphen` | `3D printer` → `3D-printer`, `A4 formaat` → `A4-formaat`, `mp3 speler` → `mp3-speler`, `4G abonnement` → `4G-abonnement` | High | [Digits and letters, rule 1](https://www.vlaanderen.be/team-taaladvies/spellingregels/aaneenschrijven/aaneenschrijven-08-combinaties-met-cijfers-letters-en-symbolen) |
 | `nl-calendar-lowercase` | `op Maandag` → `op maandag`, `in Januari` → `in januari`, `12 Mei` → `12 mei` | Medium | [Days and months, rule 1](https://www.vlaanderen.be/team-taaladvies/spellingregels/hoofdletters/hoofdletters-09-namen-van-dagen-feestdagen-periodes-en-historische-gebeurtenissen) |
 
-The compound rules use a closed list of 22 forms, including selected plurals.
+The compound rules use a closed list of 19 forms, including selected plurals.
+Suggestions use the listed casing for initialisms (`ai tool` → `AI-tool`); other
+all-caps typography is left alone.
 They do not infer new pairs from dictionary membership or apply general plural
 rules. Examples of incorrect spacing are our applications of the source rules,
 not necessarily verbatim examples published by Team Taaladvies.
@@ -51,11 +53,13 @@ For a known name or unmarked title, pass `protected_terms`:
 Terms are case-sensitive literal strings, matched at word boundaries; horizontal
 whitespace may vary (spaces, tabs, or nonbreaking spaces). They are not regular
 expressions. The tool accepts up to 100 terms, each between
-1 and 200 characters. Protection affects only the new rule layer; it does not
-whitelist words in the separate Hunspell dictionary check.
+1 and 200 characters. The rule layer skips every occurrence of a protected term,
+and the dictionary check does not report the words inside an occurrence (the
+report says how many words were skipped). The same words elsewhere in the text
+are still checked, so a term is not a general whitelist.
 
-The rule layer checks the supplied text, while the existing dictionary tokenizer
-checks up to 2,000 words. Compound matches allow horizontal whitespace, including
+The rule layer checks the supplied text, while the dictionary check stops after
+20,000 words and says so. Compound matches allow horizontal whitespace, including
 nonbreaking spaces, but do not cross line breaks. The text masking is a
 conservative safeguard, not a full Markdown, HTML, or syntax parser. For MDX,
 extract the actual prose before calling the tool.
@@ -77,6 +81,14 @@ These source-backed exceptions must remain accepted by the rule layer:
   bieden`. The ambiguous pairs `offerte aanvraag`, `menu uitdraai`, and
   `klanten service` are deliberately excluded, including when a particular
   occurrence would be a misspelled noun.
+- A place or tool followed by a plural object: `in de keuken tafels neerzetten`,
+  `met de auto ongelukken veroorzaken`, `bij het eerste contact gegevens opvragen`.
+  The pairs `keuken tafels`, `auto ongelukken`, and `contact gegevens` are excluded
+  for that reason. A listed pair directly followed by `je`, `jij`, `ik`, `we`, or
+  `wij` is read as a verb (`nummer je`, `tafel je`) and skipped.
+- Calendar words after `op`, `tot`, or a similar cue are flagged even when the
+  capitalized word is a surname (`wachtte op Vrijdag`): pass such names, and
+  official names such as `Nationaal Comité 4 en 5 Mei`, in `protected_terms`.
 
 See [word groups and compounds](https://www.vlaanderen.be/team-taaladvies/spellingregels/aaneenschrijven/aaneenschrijven-15-woordgroep-of-samenstelling)
 and the source pages in the catalog. Tests cover both the pure rule function and

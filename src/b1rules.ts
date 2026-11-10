@@ -24,7 +24,8 @@ export interface B1Rule {
 // Jargon: officialese words and phrases with plain alternatives.
 // ---------------------------------------------------------------------------
 const JARGON_RULES: B1Rule[] = [
-  { re: /\bbetreffende\b/gi, plain: 'over, bij' },
+  // Not the adjective: "de betreffende medewerker".
+  { re: /(?<!\b(?:de|het|een|deze|dit|die|dat) )\bbetreffende\b/gi, plain: 'over, bij' },
   { re: /\bcreë?eren\b|\bcreatie\b/gi, plain: 'maken, ontwerpen' },
   { re: /\bverstrekken\b|\bverstrekking\b/gi, plain: 'geven, versturen', note: 'keep "verstrekken" for official documents' },
   { re: /\bthans\b/gi, plain: 'nu' },
@@ -32,14 +33,14 @@ const JARGON_RULES: B1Rule[] = [
   { re: /\bovereenkomstig\b/gi, plain: 'volgens' },
   { re: /\bconform\b/gi, plain: 'volgens' },
   { re: /\bderhalve\b/gi, plain: 'daarom' },
-  { re: /\bevenwel\b/gi, plain: 'maar' },
-  { re: /\bimmers\b/gi, plain: 'want' },
+  { re: /\bevenwel\b/gi, plain: 'toch' },
+  { re: /\bimmers\b/gi, plain: 'want (herschrijf de zin)' },
   { re: /\bvoorts\b/gi, plain: 'verder' },
   { re: /\bnopens\b/gi, plain: 'over' },
   { re: /\bwegens\b/gi, plain: 'vanwege' },
   { re: /\bnagenoeg\b/gi, plain: 'bijna' },
   { re: /\bgenoegzaam\b/gi, plain: 'voldoende' },
-  { re: /\bvooralsnog\b/gi, plain: 'nu nog' },
+  { re: /\bvooralsnog\b/gi, plain: 'voorlopig' },
   { re: /\balsnog\b/gi, plain: 'toch nog' },
   { re: /\bper saldo\b/gi, plain: 'uiteindelijk' },
   { re: /\bin het kader van\b/gi, plain: 'voor, bij' },
@@ -70,10 +71,10 @@ const JARGON_RULES: B1Rule[] = [
   { re: /\bfundamenteel\b/gi, plain: 'basis-, belangrijk' },
   { re: /\binnovatief\b|\binnovatieve\b|\binnovatie\b/gi, plain: 'nieuw, vernieuwend' },
   { re: /\bveelzijdig\w*\b/gi, plain: 'uiteenlopend, voor veel doeleinden' },
-  { re: /\bkrachtig\b/gi, plain: 'sterk' },
+  { re: /\bkrachtige?\b/gi, plain: 'sterk' },
   { re: /\btransparant\w*\b/gi, plain: 'open, duidelijk' },
   { re: /\bintegraal\b/gi, plain: 'compleet, helemaal' },
-  { re: /\bexpliciet\b/gi, plain: 'duidelijk' },
+  { re: /\bexpliciete?\b/gi, plain: 'duidelijk' },
   { re: /\bimpliciet\b/gi, plain: 'niet gezegd maar wel bedoeld' },
   { re: /\btoereikend\w*\b/gi, plain: 'genoeg' },
   { re: /\bfunctionaliteit\w*\b/gi, plain: 'functie, wat het doet' },
@@ -89,12 +90,12 @@ const JARGON_RULES: B1Rule[] = [
 // ---------------------------------------------------------------------------
 const FILLER_RULES: B1Rule[] = [
   { re: /\bwellicht\b/gi, plain: 'misschien' },
-  { re: /\baldus\b/gi, plain: 'zo' },
+  { re: /\baldus\b/gi, plain: 'zo, volgens' },
   { re: /\been en ander\b/gi, plain: 'dit' },
   { re: /\bbij dezen\b/gi, plain: 'hierbij' },
   { re: /\bbij voorbaat dank\b/gi, plain: 'alvast bedankt' },
   { re: /\bals het ware\b/gi, plain: '(weglaten)' },
-  { re: /\bzogenaamd\w*\b/gi, plain: 'zogenaamd', note: 'usually removable; judge in context' },
+  { re: /\bzogenaamd\w*\b/gi, plain: '(weglaten)', note: 'usually removable; judge in context' },
 ];
 
 // ---------------------------------------------------------------------------
@@ -126,16 +127,19 @@ const NOMINALIZATION_RE = /\b[A-Za-z\u00C0-\u024F-]*(?:tie|ing|heid|iteit|nis|sc
 
 // Words ending in these suffixes that are ordinary, not style problems.
 const NOMINALIZATION_ALLOW = new Set([
-  'koning', 'koningen', 'omgeving', 'vooruitgang', 'nedergang', 'opgang',
-  'aankomst', 'meidagen', 'wandeling', 'training', 'warning', 'handling',
-  'kennismaking', 'vergadering', 'verhuur', 'inventing',
+  'koning', 'omgeving', 'wandeling', 'training', 'kennismaking', 'vergadering',
+  // Concrete everyday nouns, not nominalized verbs.
+  'woning', 'rekening', 'tekening', 'leerling', 'gereedschap', 'landschap',
+  'vakantie', 'kennis', 'politie', 'ring', 'ding', 'parking', 'boodschap',
+  'geschiedenis', 'gevangenis',
 ]);
 
 // ---------------------------------------------------------------------------
 // Voice consistency: Dutch web default is je/jij (configurable to u).
 // ---------------------------------------------------------------------------
 // Capital U/Uw at a sentence start counts too; "U-bocht" does not.
-const U_FORMS = /\b(?:[uU]w?|ue)\b(?!-)/g;
+// Not a time ("van 9 u tot 17 u") or a dotted abbreviation (m.u.v., a.u.b.).
+const U_FORMS = /(?<!\d ?|\.)\b[uU]w?\b(?!-|\.\w)/g;
 const JE_FORMS = /\b(je|jij|jouw|jullie|jullie\u2019s)\b/gi;
 
 export interface B1Hit {

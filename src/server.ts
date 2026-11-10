@@ -21,9 +21,12 @@ import { inputErrorResult, resolveInput, sourceSchema, type SourceArgs } from '.
 const molex = new MolexClient();
 
 const server = new McpServer(
-  { name: 'language-mcp', version: '0.10.1' },
+  { name: 'language-mcp', version: '0.11.0' },
   { capabilities: { tools: {} } }
 );
+
+/** Shared by the three spelling tools: same contract in every language. */
+const PROTECTED_TERMS_SCHEMA = z.array(z.string().min(1).max(200)).max(100).optional();
 
 const READ_ONLY = {
   readOnlyHint: true,
@@ -37,25 +40,27 @@ const READ_ONLY = {
  */
 server.tool(
   'check_us_english_text',
-  'Check English text for US English compliance: typos (hunspell en_US) + British spellings/vocabulary (colour, whilst, towards, bespoke, webshop, sole trader...) with US replacements. Use for EN pages, blogs, US-facing copy.',
+  'Check English text for US English compliance: typos (hunspell en_US) + British spellings/vocabulary (colour, whilst, towards, bespoke, webshop, sole trader...) with US replacements. Mark brand or product names with protected_terms. Use for EN pages, blogs, US-facing copy.',
   {
     text: z.string().optional().describe('The English text to check (or pass path)'),
     ...sourceSchema,
+    protected_terms: PROTECTED_TERMS_SCHEMA.describe('Case-sensitive names or titles (up to 100; horizontal whitespace may vary). Words and British forms inside an occurrence are not reported.'),
   },
-  withInput(async ({ text }) => {
-    const { tokens, truncatedAt } = scanWords(text);
+  withInput(async ({ text, protected_terms }) => {
+    const { tokens, truncatedAt, protectedSkipped, isProtected } = spellTokens(text, protected_terms, 'en_US');
     const words = tokens.map((t) => t.clean);
     const results = await hunspellWords(words, 'en_US');
 
     const flagged = unknownWords(tokens, results);
 
-    const britts = findBritticisms(text);
+    const britts = findBritticisms(text, isProtected);
     const britishWords = new Set(britts.map((b) => b.matched.toLowerCase()));
 
     const lines: string[] = [
       `US English check (hunspell en_US + britticism scan)`,
       `${tokens.length} words checked, ${flagged.length} unknown, ${britts.length} British forms.`,
     ];
+    if (protectedSkipped > 0) lines.push(`${protectedSkipped} words skipped inside protected terms.`);
     if (britts.length > 0) {
       lines.push('British spellings/vocabulary to replace:');
       for (const b of britts) {
@@ -85,15 +90,15 @@ server.tool(
  */
 server.tool(
   'check_dutch_text',
-  'Spell-check Dutch text locally with OpenTaal/hunspell and selected compound, hyphen, and calendar capitalization rules. Returns unknown words plus rule findings with suggestions, original positions, rule IDs, explanations, confidence, and Team Taaladvies source links. Not a grammar checker. Mark names or titles with protected_terms when needed. Use for CVs, cover letters, blog articles, any Dutch prose.',
+  'Spell-check Dutch text locally with OpenTaal/hunspell and selected compound, hyphen, and calendar capitalization rules. Returns unknown words plus rule findings with suggestions, original positions, rule IDs, explanations, confidence, and Team Taaladvies source links. Not a grammar checker. Mark names, brands, or titles with protected_terms when needed. Use for CVs, cover letters, blog articles, any Dutch prose.',
   {
     text: z.string().optional().describe('The Dutch text to check (or pass path)'),
     ...sourceSchema,
     context: z.string().optional().describe('Optional label, e.g. "cover letter Acme"'),
-    protected_terms: z.array(z.string().min(1).max(200)).max(100).optional().describe('Case-sensitive names or titles to exclude from the rule layer (up to 100; horizontal whitespace may vary). Does not whitelist dictionary words.'),
+    protected_terms: PROTECTED_TERMS_SCHEMA.describe('Case-sensitive names or titles (up to 100; horizontal whitespace may vary). Words inside an occurrence are not reported as unknown and the rule layer skips it. Other occurrences of the same words are still checked.'),
   },
   withInput(async ({ text, protected_terms }) => {
-    const { tokens, truncatedAt } = scanWords(text);
+    const { tokens, truncatedAt, protectedSkipped } = spellTokens(text, protected_terms, 'nl');
     const words = tokens.map((t) => t.clean);
     const results = await hunspellWords(words);
     const flagged = unknownWords(tokens, results);
@@ -106,6 +111,7 @@ server.tool(
       `${totalWords} words checked, ${uniqueFlagged} unknown words.`,
       `${rules.length} rule findings (selected patterns; review before changing text).`,
     ];
+    if (protectedSkipped > 0) lines.push(`${protectedSkipped} words skipped inside protected terms.`);
     if (flagged.length === 0) {
       lines.push(rules.length === 0
         ? 'OK: no unknown words or selected rule findings found.'
@@ -422,12 +428,13 @@ const FRENCH_DICT_MISSING =
   'French dictionary not found: expected assets/fr.dic and assets/fr.aff (or a system fr_FR hunspell dictionary). French spelling is unavailable in this install.';
 
 /**
- * Tokens for the French spell check. Elided acronyms and codes (l'ADN, d'IA,
- * l'EN795) are not words for the dictionary, and protected terms (brand or
+ * Tokens for a spell check, minus protected terms. Protected terms (brand or
  * product names, case-sensitive; horizontal whitespace may vary) are skipped
- * together with every word that lies inside one of their occurrences.
+ * together with every word that lies fully inside one of their occurrences,
+ * the same way in every language. French only: elided acronyms and codes
+ * (l'ADN, d'IA, l'EN795) are not words for the dictionary.
  */
-function frenchSpellTokens(text: string, protectedTerms: string[] | undefined) {
+function spellTokens(text: string, protectedTerms: string[] | undefined, lang: 'nl' | 'en_US' | 'fr') {
   const { tokens, truncatedAt } = scanWords(text);
   const spans: Array<[number, number]> = [];
   for (const term of protectedTerms ?? []) {
@@ -435,16 +442,17 @@ function frenchSpellTokens(text: string, protectedTerms: string[] | undefined) {
     if (!source) continue;
     for (const m of text.matchAll(new RegExp(source, 'g'))) spans.push([m.index ?? 0, (m.index ?? 0) + m[0].length]);
   }
+  const isProtected = (start: number, end: number) => spans.some(([a, b]) => start >= a && end <= b);
   let protectedSkipped = 0;
   const kept = tokens.filter((t) => {
-    if (/^(?:[cdjlmnst]|qu|jusqu|lorsqu|puisqu|quoiqu)['’]\p{Lu}[\p{Lu}\d]+$/u.test(t.clean)) return false;
-    if (spans.some(([a, b]) => t.index >= a && t.index + t.word.length <= b)) {
+    if (lang === 'fr' && /^(?:[cdjlmnst]|qu|jusqu|lorsqu|puisqu|quoiqu)['’]\p{Lu}[\p{Lu}\d]+$/u.test(t.clean)) return false;
+    if (isProtected(t.index, t.index + t.word.length)) {
       protectedSkipped++;
       return false;
     }
     return true;
   });
-  return { tokens: kept, truncatedAt, protectedSkipped };
+  return { tokens: kept, truncatedAt, protectedSkipped, isProtected };
 }
 
 /**
@@ -457,11 +465,11 @@ server.tool(
     text: z.string().optional().describe('The French text to check (or pass path)'),
     ...sourceSchema,
     context: z.string().optional().describe('Optional label, e.g. "page À propos"'),
-    protected_terms: z.array(z.string().min(1).max(200)).max(100).optional().describe('Case-sensitive names or titles whose words are not reported as unknown (up to 100; horizontal whitespace may vary).'),
+    protected_terms: PROTECTED_TERMS_SCHEMA.describe('Case-sensitive names or titles whose words are not reported as unknown (up to 100; horizontal whitespace may vary).'),
   },
   withInput(async ({ text, context, protected_terms }) => {
     if (!dictAvailable('fr')) return { content: [{ type: 'text', text: FRENCH_DICT_MISSING }], isError: true };
-    const { tokens, truncatedAt, protectedSkipped } = frenchSpellTokens(text, protected_terms);
+    const { tokens, truncatedAt, protectedSkipped } = spellTokens(text, protected_terms, 'fr');
     const results = await hunspellWords(tokens.map((t) => t.clean), 'fr');
     const flagged = unknownWords(tokens, results);
     const lines: string[] = [

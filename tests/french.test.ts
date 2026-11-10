@@ -246,6 +246,19 @@ describe('French tools over MCP (scrubbed env, source server)', { timeout: 12000
       assert.match(r.text, /Passive voice[^\n]*\n- None detected\./);
     });
 
+    it('applies protected_terms the same way in the Dutch and English spelling tools', async () => {
+      const nl = await call('check_dutch_text', { text: 'Het harnas van Skylotecz Pro is sterk. Een skylotecz is dat niet.', protected_terms: ['Skylotecz Pro'] });
+      assert.match(nl.text, /2 words skipped inside protected terms/);
+      assert.match(nl.text, /1 unknown words/);
+      assert.match(nl.text, /- skylotecz /);
+      const en = await call('check_us_english_text', { text: 'We met at the Whilst Labz studio. We wait whilst it loads.', protected_terms: ['Whilst Labz'] });
+      assert.match(en.text, /2 words skipped inside protected terms/);
+      assert.match(en.text, /0 unknown, 1 British forms/);
+      assert.match(en.text, /"whilst" → "while" \(position 42\)/);
+      const plain = await call('check_us_english_text', { text: 'The color is nice.' });
+      assert.doesNotMatch(plain.text, /protected/);
+    });
+
     it('returns a clear error for an empty word', async () => {
       for (const tool of ['validate_french_word', 'validate_dutch_word', 'validate_us_english_word']) {
         for (const word of ['  ', '—', '×']) {

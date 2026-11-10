@@ -26,7 +26,8 @@ the `Input:` provenance line with `input_sha256`.
 
 Parameters: `text` or `path` (+ `start`, `end`, `expected_sha256`), optional
 `context`, optional `protected_terms` (case-sensitive names; horizontal whitespace
-may vary; every word inside a match is skipped and the skipped count is reported).
+may vary; every word inside a match is skipped and the skipped count is reported; the
+Dutch and US English spelling tools follow the same contract).
 
 - Spelling only (hunspell `-a`). It does not check agreement, conjugation, or the
   choice between two valid words (a/à, ou/où, et/est).
