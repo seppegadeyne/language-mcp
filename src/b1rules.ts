@@ -69,7 +69,8 @@ const JARGON_RULES: B1Rule[] = [
   { re: /\bessentieel\b/gi, plain: 'nodig, belangrijk' },
   { re: /\bcruciaal\b/gi, plain: 'belangrijk' },
   { re: /\bfundamenteel\b/gi, plain: 'basis-, belangrijk' },
-  { re: /\binnovatief\b|\binnovatieve\b|\binnovatie\b/gi, plain: 'nieuw, vernieuwend' },
+  { re: /\binnovatief\b|\binnovatieve\b/gi, plain: 'nieuw, vernieuwend' },
+  { re: /\binnovaties?\b/gi, plain: 'vernieuwing, iets nieuws' },
   { re: /\bveelzijdig\w*\b/gi, plain: 'uiteenlopend, voor veel doeleinden' },
   { re: /\bkrachtige?\b/gi, plain: 'sterk' },
   { re: /\btransparant\w*\b/gi, plain: 'open, duidelijk' },
@@ -140,7 +141,7 @@ const NOMINALIZATION_ALLOW = new Set([
 // Capital U/Uw at a sentence start counts too; "U-bocht" does not.
 // Not a time ("van 9 u tot 17 u") or a dotted abbreviation (m.u.v., a.u.b.).
 const U_FORMS = /(?<!\d ?|\.)\b[uU]w?\b(?!-|\.\w)/g;
-const JE_FORMS = /\b(je|jij|jouw|jullie|jullie\u2019s)\b/gi;
+const JE_FORMS = /\b(je|jij|jouw|jullie)\b/gi;
 
 export interface B1Hit {
   index: number;

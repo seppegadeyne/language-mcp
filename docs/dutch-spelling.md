@@ -52,7 +52,8 @@ For a known name or unmarked title, pass `protected_terms`:
 
 Terms are case-sensitive literal strings, matched at word boundaries; horizontal
 whitespace may vary (spaces, tabs, or nonbreaking spaces). They are not regular
-expressions. The tool accepts up to 100 terms, each between
+expressions, and they are compared as written: a term in composed Unicode form
+does not match the same word typed with combining accents. The tool accepts up to 100 terms, each between
 1 and 200 characters. The rule layer skips every occurrence of a protected term,
 and the dictionary check does not report the words inside an occurrence (the
 report says how many words were skipped). The same words elsewhere in the text

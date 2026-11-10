@@ -109,6 +109,13 @@ describe('English readability', () => {
     assert.deepEqual(address.readerTop, [{ word: 'members', count: 1 }]);
   });
 
+  it('matches inflected idioms and leaves literal motion and plain phrases alone', () => {
+    const idioms = findB1HitsEn('She bit the bullet, thought outside the box, got the ball rolling, and did two deep dives.');
+    assert.equal(idioms.filter((h) => h.category === 'idiom').length, 4);
+    assert.deepEqual(findB1HitsEn('The car is moving forward. We take part in the event. We make applications for iOS.').map((h) => h.matched), []);
+    assert.deepEqual(findB1HitsEn('Moving forward, we ship weekly.').map((h) => h.matched), ['Moving forward']);
+  });
+
   it('counts one-letter words (a, I) as words', () => {
     const { sentences } = analyzeProse('I saw a cat. It is a pet I like.', 'en');
     assert.deepEqual(sentences.map((s) => s.words.length), [4, 6]);

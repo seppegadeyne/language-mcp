@@ -260,6 +260,7 @@ describe('French passive proxy', () => {
   it('marks emotional and state participles as low confidence', async () => {
     const hits = await detect('Je suis désolé. La salle est occupée. Le prix est élevé.');
     assert.deepEqual(hits.map((h) => `${h.participle}:${h.confidence}`), ['désolé:low', 'occupée:low', 'élevé:low']);
+    assert.deepEqual((await detect('Il est haï de tous.')).map((h) => h.participle), ['haï']);
     const jobs = await detect('Il est député. Elle est salariée chez nous.');
     assert.ok(jobs.every((h) => h.confidence === 'low'));
   });

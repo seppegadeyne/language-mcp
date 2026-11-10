@@ -37,6 +37,10 @@ describe('Dutch spelling review regressions', () => {
     }
   });
 
+  it('does not read the tail of a word cut by the look-back window as a cue', () => {
+    assert.deepEqual(matches('loop' + ' '.repeat(58) + 'Maandag'), []);
+  });
+
   it('still recognizes sentence-initial and list-initial calendar cues', () => {
     for (const text of ['Tot Maandag!', 'Op Maandag openen we.', 'Het gaat door. Elke Maandag open.',
       '- Elke Maandag open', '1. Elke Maandag open', '> Elke Maandag open']) {

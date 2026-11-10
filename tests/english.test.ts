@@ -89,7 +89,7 @@ describe('britticism detector', () => {
     assert.equal(map.get('fulfil'), 'fulfill');
     assert.equal(map.get('fulfils'), 'fulfills');
     assert.equal(map.get('fulfilment'), 'fulfillment');
-    assert.equal(map.get('Nappies'), 'diapers');
+    assert.equal(map.get('Nappies'), 'Diapers'); // sentence-initial capital kept
     assert.equal(map.get('mobile phones'), 'cell phones');
     // fulfilled/fulfilling are already US spellings
     assert.deepEqual(findBritticisms('Orders fulfilled, fulfilling more.'), []);
@@ -108,6 +108,12 @@ describe('britticism detector', () => {
       'catalogued→cataloged', 'dialogue box→dialog box', 'manoeuvred→maneuvered', 'storeys→stories', 'added to basket→added to cart',
       'flat to rent→apartment for rent', 'car park→parking lot', 'car hire→car rental', 'telly→TV',
     ]);
+  });
+
+  it('keeps a sentence-initial capital and counts repeats', () => {
+    const hits = findBritticisms('Whilst we wait, the colour fades whilst drying.');
+    assert.deepEqual(hits.map((h) => [h.matched, h.american, h.count]), [['colour', 'color', 1], ['Whilst', 'While', 2]]);
+    assert.equal(findBritticisms('Your CV.')[0].american, 'resume');
   });
 
   it('skips matches inside a protected span before counting', () => {

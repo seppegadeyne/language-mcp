@@ -21,7 +21,7 @@ import { inputErrorResult, resolveInput, sourceSchema, type SourceArgs } from '.
 const molex = new MolexClient();
 
 const server = new McpServer(
-  { name: 'language-mcp', version: '0.11.0' },
+  { name: 'language-mcp', version: '0.11.1' },
   { capabilities: { tools: {} } }
 );
 
@@ -65,7 +65,8 @@ server.tool(
       lines.push('British spellings/vocabulary to replace:');
       for (const b of britts) {
         const note = b.note ? ` — ${b.note}` : '';
-        lines.push(`- "${b.matched}" → "${b.american}" (position ${b.index})${note}`);
+        const cnt = b.count > 1 ? ` [${b.count}x]` : '';
+        lines.push(`- "${b.matched}"${cnt} → "${b.american}" (position ${b.index})${note}`);
       }
     }
     const unknownOnly = flagged.filter((f) => !britishWords.has(f.word.toLowerCase()));
@@ -151,7 +152,7 @@ server.tool(
     max_sentence_words: z.number().int().positive().optional().describe('Flag sentences above this many words (default 20)'),
     warn_sentence_words: z.number().int().positive().optional().describe('Warn from this many words per sentence (default 15)'),
     max_para_words: z.number().int().positive().optional().describe('Flag paragraphs above this many words (default 150)'),
-    flesch_douma_min: z.number().optional().describe('Minimum Flesch-Douma score for the B1 band (default 60)'),
+    flesch_douma_min: z.number().min(0).max(100).optional().describe('Minimum Flesch-Douma score for the B1 band (default 60)'),
     voice: z.enum(['je', 'u']).optional().describe('Expected address form (default je)'),
     rare_word_zipf_max: z.number().optional().describe('Flag known words with a Zipf frequency below this value as rare/difficult (default 3). Zipf table: top 50k Dutch forms from OpenSubtitles2018 (spoken-language bias); unknown words are never flagged.'),
   },
@@ -313,7 +314,7 @@ server.tool(
     max_sentence_words: z.number().int().positive().optional().describe('Flag sentences above this many words (default 25, the GOV.UK limit)'),
     warn_sentence_words: z.number().int().positive().optional().describe('Warn from this many words per sentence (default 20, the plainlanguage.gov average)'),
     max_para_words: z.number().int().positive().optional().describe('Flag paragraphs above this many words (default 150)'),
-    flesch_min: z.number().optional().describe('Minimum Flesch Reading Ease for the B1 band (default 60)'),
+    flesch_min: z.number().min(0).max(100).optional().describe('Minimum Flesch Reading Ease for the B1 band (default 60)'),
     max_grade: z.number().optional().describe('Maximum Flesch-Kincaid grade level (default 9)'),
     address: z.enum(['you', 'any']).optional().describe('Expected reader address: "you" (default) reports third-person references to the reader; "any" only counts them'),
   },
@@ -506,7 +507,7 @@ server.tool(
     max_sentence_words: z.number().int().positive().optional().describe('Flag sentences above this many words (default 25)'),
     warn_sentence_words: z.number().int().positive().optional().describe('Warn from this many words per sentence (default 20)'),
     max_para_words: z.number().int().positive().optional().describe('Flag paragraphs above this many words (default 150)'),
-    kandel_moles_min: z.number().optional().describe('Minimum Kandel & Moles score for the B1 band (default 60)'),
+    kandel_moles_min: z.number().min(0).max(100).optional().describe('Minimum Kandel & Moles score for the B1 band (default 60)'),
     voice: z.enum(['vous', 'tu']).optional().describe('Expected address form (default vous)'),
   },
   withInput(async ({ text, context, max_sentence_words, warn_sentence_words, max_para_words, kandel_moles_min, voice = 'vous' }) => {

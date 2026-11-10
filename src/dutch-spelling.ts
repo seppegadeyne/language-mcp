@@ -196,6 +196,8 @@ export function findDutchSpellingIssues(text: string, options: DutchSpellingOpti
       : '(?:in|vanaf|tot|sinds|volgende|vorige|komende|aanstaande|afgelopen|deze|(?<![.,])(?:0?[1-9]|[12][0-9]|3[01]))';
     const cueMatch = new RegExp(`(?<!${WORD_EDGE})(${cue})${SPACE}$`, 'iu').exec(before);
     if (!cueMatch) continue;
+    // A cue at the very start of the look-back window may be the tail of a longer word.
+    if (cueMatch.index === 0 && m.index > before.length) continue;
     if (/\p{Lu}/u.test(cueMatch[1])) {
       const prefix = t.slice(0, m.index - before.length + cueMatch.index);
       // An internal capital may belong to a name ("Elke Maandag") or title.

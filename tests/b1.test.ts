@@ -157,6 +157,11 @@ describe('readability', () => {
     assert.deepEqual(hits.map((h) => h.matched), ['Betreffende', 'krachtige', 'expliciete']);
   });
 
+  it('gives the noun innovatie a noun as plain alternative', () => {
+    const hits = findB1Hits('Een innovatie en een innovatieve aanpak.');
+    assert.deepEqual(hits.map((h) => h.plain), ['vernieuwing, iets nieuws', 'nieuw, vernieuwend']);
+  });
+
   it('counts the one-letter pronoun "u" as a word', () => {
     const { sentences } = analyzeProse('Als u een aanvraag doet, krijgt u bericht.');
     assert.equal(sentences[0].words.length, 8);

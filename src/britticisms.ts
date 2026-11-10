@@ -121,16 +121,17 @@ const RULES: Array<{ re: RegExp; us: string; note?: string }> = [
 ];
 
 export interface BritticismHit {
-  index: number;
+  index: number; // first occurrence
   matched: string;
   american: string;
   note?: string;
+  count: number; // occurrences of this form
 }
 
 /** `skip` drops matches inside caller-protected spans before they are counted. */
 export function findBritticisms(text: string, skip?: (start: number, end: number) => boolean): BritticismHit[] {
   const hits: BritticismHit[] = [];
-  const seen = new Map<string, BritticismHit & { count: number }>();
+  const seen = new Map<string, BritticismHit>();
   for (const rule of RULES) {
     const re = new RegExp(rule.re.source, rule.re.flags);
     let m: RegExpExecArray | null;
@@ -141,12 +142,14 @@ export function findBritticisms(text: string, skip?: (start: number, end: number
       // Substitute $1 with the captured suffix when present
       if (m[1] !== undefined && us.includes('$1')) us = us.replace('$1', m[1]);
       else us = us.replace('$1', '');
+      // Keep a sentence-initial capital: "Whilst" -> "While".
+      if (/^\p{Lu}\p{Ll}/u.test(matched) && /^\p{Ll}/u.test(us)) us = us[0].toUpperCase() + us.slice(1);
       const key = `${matched.toLowerCase()}→${us.toLowerCase()}`;
       const existing = seen.get(key);
       if (existing) {
         existing.count++;
       } else {
-        const hit: BritticismHit & { count: number } = {
+        const hit: BritticismHit = {
           index: m.index,
           matched,
           american: us,

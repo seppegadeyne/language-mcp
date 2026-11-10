@@ -91,7 +91,7 @@ const IRREGULAR = new Set([
   'sous-entendu', 'entendu', 'perdu', 'rendu', 'vendu', 'attendu', 'répondu',
   'suivi', 'poursuivi', 'servi', 'rouvert', 'recouvert', 'craint', 'rejoint',
   'plaint', 'enfreint', 'feint', 'teint', 'astreint', 'cuit', 'extrait',
-  'distrait', 'soustrait', 'clos',
+  'distrait', 'soustrait', 'clos', 'haï',
 ]);
 
 // Frequent words that the morphology also reads as a form of an -ir/-re/-oir
