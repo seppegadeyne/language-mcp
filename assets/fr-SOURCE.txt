@@ -1,0 +1,31 @@
+French hunspell dictionary: provenance
+======================================
+
+Files: fr.dic, fr.aff  (unmodified copies of fr-toutesvariantes.dic / fr-toutesvariantes.aff)
+Variant: "Toutes variantes" (accepts both the traditional spellings and the 1990
+         reform spellings, e.g. both évènement and événement, both ognon and oignon).
+Upstream: Dicollecte / Grammalecte, French dictionaries v7.7 by Olivier R.
+          https://grammalecte.net/
+Release archive: https://grammalecte.net/download/fr/dic/hunspell-french-dictionaries-v7.7.zip
+Downloaded: 2026-11-10 (archive timestamps inside: 2025-12-15)
+License: MPL 2.0 (Mozilla Public License 2.0), see fr-LICENSE-MPL-2.0.txt and fr-README.txt.
+         License text: https://www.mozilla.org/media/MPL/2.0/index.f75d2927d3c1.txt
+
+SHA-256
+  hunspell-french-dictionaries-v7.7.zip  44314d992f94b4658c31a86ef2351724a43067531b0af3643f91bf0220eee616
+  fr.dic (= fr-toutesvariantes.dic)      140c5296b514bc55af7433f8913a73245b9b18116830a7db48e2aabfa85fcbed
+  fr.aff (= fr-toutesvariantes.aff)      254756d4fd286a923b3f51dae65965bfc8619aa96db8528326bf31fcdc0840e4
+  fr-README.txt (= README_dict_fr.txt)   4a25abf740ad6ba5e8d0cfc0d2ffadc3c13c303f8fe389f323b061a389350f83
+
+Cross-check of the download: upstream publishes no checksum. The "classique"
+files in the same archive (fr-classique.dic b78a868e...c88c, fr-classique.aff
+c176610c...2de5) are byte-identical to fr_FR/dictionaries/fr.dic and fr.aff in
+https://github.com/LibreOffice/dictionaries at commit
+8a58c570f0e9cb1d908db15c878c1f371a793d8b, an independent distribution channel
+of the same Dicollecte release. LibreOffice ships the "classique" variant; this
+repository bundles "toutes variantes" from the official archive instead.
+
+Why "toutes variantes": website copy can follow either spelling system, and a
+spell check must not flag a valid reform spelling or a valid traditional one.
+Choose the stricter "classique" or "reforme1990" files only if a project fixes
+one system; replace fr.dic and fr.aff together.
