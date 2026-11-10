@@ -21,7 +21,7 @@ export function utf8SpawnEnv(): NodeJS.ProcessEnv {
 }
 
 /**
- * Hunspell pipe (-a / ispell protocol) wrapper for Dutch spell checking.
+ * Hunspell pipe (-a / ispell protocol) wrapper for Dutch, US English, and French spell checking.
  *
  * Protocol notes (verified against hunspell 1.7.3):
  * - First output line is a banner starting with `@(#)`.
@@ -43,7 +43,7 @@ export interface HunspellResult {
   suggestions: string[];
 }
 
-export type HunspellLang = 'nl' | 'en_US';
+export type HunspellLang = 'nl' | 'en_US' | 'fr';
 
 /**
  * Run one hunspell batch (`-a` or `-m`) and return one response block per
@@ -134,16 +134,28 @@ export async function hunspellWords(words: string[], lang: HunspellLang = 'nl'):
   return results;
 }
 
-/** Bundled asset path first, system dictionaries as fallbacks (ADR 001). */
-export function resolveDict(lang: HunspellLang): string {
+/** Candidate dictionary base paths: bundled asset first, system dictionaries as fallbacks (ADR 001). */
+function dictCandidates(lang: HunspellLang): string[] {
   const candidates = [
     path.join(__dirname, '..', 'assets', lang),
     path.join(process.cwd(), 'assets', lang),
   ];
   if (lang === 'nl') candidates.push('/usr/share/hunspell/nl_NL', 'nl_NL');
-  else candidates.push('/usr/share/hunspell/en_US', 'en_US');
-  for (const c of candidates) {
+  else if (lang === 'fr') {
+    candidates.push('/usr/share/hunspell/fr_FR', '/usr/share/hunspell/fr', '/usr/share/myspell/fr_FR', 'fr_FR');
+  } else candidates.push('/usr/share/hunspell/en_US', 'en_US');
+  return candidates;
+}
+
+/** Bundled asset path first, system dictionaries as fallbacks (ADR 001). */
+export function resolveDict(lang: HunspellLang): string {
+  for (const c of dictCandidates(lang)) {
     if (fs.existsSync(c + '.dic')) return c;
   }
   return lang;
+}
+
+/** True when a dictionary for the language exists at a bundled or system path. */
+export function dictAvailable(lang: HunspellLang): boolean {
+  return dictCandidates(lang).some((c) => fs.existsSync(c + '.dic') && fs.existsSync(c + '.aff'));
 }

@@ -24,11 +24,15 @@
  *   Equivalent per-word form: 195 - 66.667 * ASW - 2 * ASL. Sentence length
  *   weighs ~2x heavier than in Flesch-Douma (0.93), so it flags long
  *   sentences more aggressively. Not empirically re-validated recently.
+ * - Kandel & Moles (1958), French adaptation of Flesch Reading Ease:
+ *   207 - 1.015 * ASL - 73.6 * ASW. Syllables are counted by
+ *   src/syllables-fr.ts (mute final e not counted).
  * ASL = average sentence length in words; ASW = average syllables per word.
  */
 
 import { countSyllables } from './syllables.js';
 import { countSyllablesEn } from './syllables-en.js';
+import { countSyllablesFr } from './syllables-fr.js';
 import type { Sentence, ProseLang } from './prose.js';
 
 export interface ReadabilityStats {
@@ -36,6 +40,7 @@ export interface ReadabilityStats {
   fleschDouma: number | null; // Dutch only
   fleschReadingEase: number | null; // English only
   fleschKincaidGrade: number | null; // English only
+  kandelMoles: number | null; // French only
   lix: number | null; // Läsbarhetsindex (Dutch tool only)
   brouwer: number | null; // Brouwer Leesindex A (Dutch only)
   ari: number | null;
@@ -67,11 +72,13 @@ export interface ReadabilityThresholds {
 export const READABILITY_DEFAULTS: Record<ProseLang, Required<ReadabilityThresholds>> = {
   nl: { maxSentenceWords: 20, warnSentenceWords: 15, maxParaWords: 150, minWords: 50 },
   en: { maxSentenceWords: 25, warnSentenceWords: 20, maxParaWords: 150, minWords: 50 },
+  // French: same plain-language limits as English (no French-specific consensus).
+  fr: { maxSentenceWords: 25, warnSentenceWords: 20, maxParaWords: 150, minWords: 50 },
 };
 
 // Long-word threshold: Dutch compounds make >=4 syllables the useful cut;
 // English uses >=3 syllables ("complex words", as in the Gunning fog index).
-export const LONG_WORD_SYLLABLES: Record<ProseLang, number> = { nl: 4, en: 3 };
+export const LONG_WORD_SYLLABLES: Record<ProseLang, number> = { nl: 4, en: 3, fr: 4 };
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
@@ -87,7 +94,7 @@ export function computeReadability(
     Object.entries(opts).filter(([, v]) => v !== undefined)
   ) as ReadabilityThresholds;
   const t = { ...READABILITY_DEFAULTS[lang], ...defined };
-  const syl = lang === 'en' ? countSyllablesEn : countSyllables;
+  const syl = lang === 'en' ? countSyllablesEn : lang === 'fr' ? countSyllablesFr : countSyllables;
   const longAt = LONG_WORD_SYLLABLES[lang];
 
   const wordCount = sentences.reduce((n, s) => n + s.words.length, 0);
@@ -113,6 +120,7 @@ export function computeReadability(
   let fleschDouma: number | null = null;
   let fleschReadingEase: number | null = null;
   let fleschKincaidGrade: number | null = null;
+  let kandelMoles: number | null = null;
   let ari: number | null = null;
   let lix: number | null = null;
   let brouwer: number | null = null;
@@ -121,6 +129,8 @@ export function computeReadability(
     const asw = syllables / wordCount;
     if (lang === 'nl') {
       fleschDouma = round1(206.835 - 0.93 * asl - 77 * asw);
+    } else if (lang === 'fr') {
+      kandelMoles = round1(207 - 1.015 * asl - 73.6 * asw);
     } else {
       fleschReadingEase = round1(206.835 - 1.015 * asl - 84.6 * asw);
       fleschKincaidGrade = round1(0.39 * asl + 11.8 * asw - 15.59);
@@ -139,6 +149,7 @@ export function computeReadability(
     fleschDouma,
     fleschReadingEase,
     fleschKincaidGrade,
+    kandelMoles,
     lix,
     brouwer,
     ari,
@@ -164,7 +175,8 @@ export function fleschDoumaBand(score: number): 'b1' | 'above-b1' | 'below-b1' |
 }
 
 /**
- * Bands for English Flesch Reading Ease, following Flesch's own table:
+ * Bands for English Flesch Reading Ease (also used for Kandel & Moles, whose
+ * scale is the same 0-100 range with the same interpretation table), following Flesch's own table:
  * 60-70 "standard / plain English" (about US grade 8-9) is the practical
  * B1 zone; 70+ is easier; 50-60 "fairly difficult"; below 50 "difficult".
  * The minimum is a tool parameter (default 60).

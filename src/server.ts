@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { hunspellWords, type HunspellResult } from './hunspell.js';
+import { dictAvailable, hunspellWords, type HunspellResult } from './hunspell.js';
 import { MolexClient } from './molex.js';
 import { extractWords, scanWords, MAX_SPELL_WORDS, type Token } from './tokenize.js';
 import { findBritticisms } from './britticisms.js';
@@ -14,12 +14,14 @@ import { suggestSynonyms } from './synonyms.js';
 import { findB1HitsEn, findNominalizationsEn, analyzeAddressEn } from './b1rules-en.js';
 import { detectPassives } from './passive.js';
 import { detectPassivesEn } from './passive-en.js';
+import { detectPassivesFr } from './passive-fr.js';
+import { analyzeVoiceFr } from './voice-fr.js';
 import { inputErrorResult, resolveInput, sourceSchema, type SourceArgs } from './source.js';
 
 const molex = new MolexClient();
 
 const server = new McpServer(
-  { name: 'language-mcp', version: '0.9.0' },
+  { name: 'language-mcp', version: '0.10.0' },
   { capabilities: { tools: {} } }
 );
 
@@ -416,6 +418,175 @@ server.tool(
   })
 );
 
+const FRENCH_DICT_MISSING =
+  'French dictionary not found: expected assets/fr.dic and assets/fr.aff (or a system fr_FR hunspell dictionary). French spelling is unavailable in this install.';
+
+/**
+ * Tokens for the French spell check. Elided acronyms and codes (l'ADN, d'IA,
+ * l'EN795) are not words for the dictionary, and protected terms (brand or
+ * product names, case-sensitive; horizontal whitespace may vary) are skipped
+ * together with every word that lies inside one of their occurrences.
+ */
+function frenchSpellTokens(text: string, protectedTerms: string[] | undefined) {
+  const { tokens, truncatedAt } = scanWords(text);
+  const spans: Array<[number, number]> = [];
+  for (const term of protectedTerms ?? []) {
+    const source = term.trim().split(/[ \t\u00a0\u202f]+/).map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('[ \\t\\u00a0\\u202f]+');
+    if (!source) continue;
+    for (const m of text.matchAll(new RegExp(source, 'g'))) spans.push([m.index ?? 0, (m.index ?? 0) + m[0].length]);
+  }
+  let protectedSkipped = 0;
+  const kept = tokens.filter((t) => {
+    if (/^(?:[cdjlmnst]|qu|jusqu|lorsqu|puisqu|quoiqu)['’]\p{Lu}[\p{Lu}\d]+$/u.test(t.clean)) return false;
+    if (spans.some(([a, b]) => t.index >= a && t.index + t.word.length <= b)) {
+      protectedSkipped++;
+      return false;
+    }
+    return true;
+  });
+  return { tokens: kept, truncatedAt, protectedSkipped };
+}
+
+/**
+ * check_french_text: spell-check for French text (hunspell + Dicollecte).
+ */
+server.tool(
+  'check_french_text',
+  'Spell-check French text locally with hunspell and the Dicollecte/Grammalecte French dictionary ("toutes variantes": both the traditional and the 1990 reform spellings are accepted). Returns unknown words with suggestions and positions. Elisions (l\'ancrage, d\'un, qu\'il, aujourd\'hui) are checked with straight and typographic apostrophes; hyphenated words and non-breaking spaces before ; : ? ! do not cause false flags. Not a grammar checker: agreement, conjugation, and the choice between valid words are not checked. Mark brand or product names with protected_terms. Use for French pages, blogs, and copy.',
+  {
+    text: z.string().optional().describe('The French text to check (or pass path)'),
+    ...sourceSchema,
+    context: z.string().optional().describe('Optional label, e.g. "page À propos"'),
+    protected_terms: z.array(z.string().min(1).max(200)).max(100).optional().describe('Case-sensitive names or titles whose words are not reported as unknown (up to 100; horizontal whitespace may vary).'),
+  },
+  withInput(async ({ text, context, protected_terms }) => {
+    if (!dictAvailable('fr')) return { content: [{ type: 'text', text: FRENCH_DICT_MISSING }], isError: true };
+    const { tokens, truncatedAt, protectedSkipped } = frenchSpellTokens(text, protected_terms);
+    const results = await hunspellWords(tokens.map((t) => t.clean), 'fr');
+    const flagged = unknownWords(tokens, results);
+    const lines: string[] = [
+      `French spell check (hunspell, Dicollecte "toutes variantes" dictionary, local)`,
+    ];
+    if (context) lines.push(`Context: ${context}`);
+    lines.push(`${tokens.length} words checked, ${flagged.length} unknown words.`);
+    if (protectedSkipped > 0) lines.push(`${protectedSkipped} words skipped inside protected terms.`);
+    if (flagged.length === 0) {
+      lines.push('OK: no unknown words found. (Spelling only: grammar and agreement are not checked.)');
+    } else {
+      lines.push('Potential spelling errors (suggestions = closest corrections):');
+      for (const f of flagged) {
+        const sug = f.suggestions.length ? f.suggestions.join(', ') : '(none)';
+        const cnt = f.count > 1 ? ` [${f.count}x]` : '';
+        lines.push(`- ${f.word}${cnt} → ${sug} (position ${f.first_index})`);
+      }
+    }
+    return spellLimitNote(lines, truncatedAt);
+  })
+);
+
+/**
+ * check_french_b1_text: deterministic plain-language (B1) proxies for French
+ * text. Same structure and output shape as check_us_english_b1_text.
+ */
+server.tool(
+  'check_french_b1_text',
+  'Check French text for B1-level plain-language proxies: readability (Kandel & Moles 1958, the French adaptation of Flesch Reading Ease), sentence and paragraph length, passive voice (être + past participle; precision first), and address-form consistency (voice "vous" by default: reports tu/toi/te/ton/ta/tes/tien forms, or the reverse for voice "tu"). These are deterministic proxies, not a validated B1 verdict. Local (hunspell fr); no network. Use together with check_french_text (spelling) for complete language review.',
+  {
+    text: z.string().optional().describe('The French text to check (or pass path)'),
+    ...sourceSchema,
+    context: z.string().optional().describe('Optional label, e.g. "page Services"'),
+    max_sentence_words: z.number().int().positive().optional().describe('Flag sentences above this many words (default 25)'),
+    warn_sentence_words: z.number().int().positive().optional().describe('Warn from this many words per sentence (default 20)'),
+    max_para_words: z.number().int().positive().optional().describe('Flag paragraphs above this many words (default 150)'),
+    kandel_moles_min: z.number().optional().describe('Minimum Kandel & Moles score for the B1 band (default 60)'),
+    voice: z.enum(['vous', 'tu']).optional().describe('Expected address form (default vous)'),
+  },
+  withInput(async ({ text, context, max_sentence_words, warn_sentence_words, max_para_words, kandel_moles_min, voice = 'vous' }) => {
+    try {
+      const { sentences, paragraphs } = analyzeProse(text, 'fr');
+      const paraWordCounts = paragraphs.map((p) => wordTokens(p.text).length);
+      const stats = computeReadability(sentences, paraWordCounts, {
+        maxSentenceWords: max_sentence_words,
+        warnSentenceWords: warn_sentence_words,
+        maxParaWords: max_para_words,
+      }, 'fr');
+      const voiceReport = analyzeVoiceFr(text, voice);
+      const dictOk = dictAvailable('fr');
+      const passives = dictOk ? await detectPassivesFr(sentences) : [];
+
+      const kmMin = kandel_moles_min ?? 60;
+      const warnAt = warn_sentence_words ?? 20;
+      const flagAt = max_sentence_words ?? 25;
+
+      const lines: string[] = [];
+      lines.push(`French B1 plain-language check (B1 proxies, not a validated B1 verdict)`);
+      if (context) lines.push(`Context: ${context}`);
+      lines.push('');
+      lines.push(`Readability:`);
+      if (stats.kandelMoles !== null) {
+        const band = fleschReadingEaseBand(stats.kandelMoles, kmMin);
+        lines.push(`- Kandel & Moles: ${stats.kandelMoles} (band: ${band}; B1 target ${kmMin}-70; French adaptation of Flesch Reading Ease, not validated for B1)`);
+      } else {
+        lines.push(`- Kandel & Moles: n/a (sample below 50 words / fewer than 3 sentences; formulas unstable on short samples)`);
+      }
+      lines.push(`- Words: ${stats.wordCount}, sentences: ${stats.sentenceCount}, avg ${stats.avgSentenceLength} words/sentence (an elided clitic counts with its word: l'ancrage = 1 word)`);
+      lines.push(`- Sentences over ${warnAt} words: ${stats.longSentences + stats.veryLongSentences} (${stats.veryLongSentences} over ${flagAt})`);
+      const longest = sentences
+        .filter((s) => s.words.length > flagAt)
+        .sort((a, b) => b.words.length - a.words.length)
+        .slice(0, 5);
+      for (const s of longest) {
+        lines.push(`  - ${s.words.length} words: "${truncate(s.text, 90)}" (position ${s.start})`);
+      }
+      lines.push(`- Long words (>=${stats.longWordSyllables} syllables): ${Math.round(stats.longWordShare * 100)}% (syllables are estimated; mute final e not counted)`);
+      lines.push(`- Paragraphs: ${stats.paraCount} (${stats.longParas} over ${max_para_words ?? 150} words)`);
+
+      lines.push('');
+      lines.push(`Passive voice (être + past participle; review flags, not verdicts):`);
+      if (!dictOk) {
+        lines.push(`- skipped (French dictionary not found in this install).`);
+      } else if (passives.length === 0) {
+        lines.push(`- None detected.`);
+      } else {
+        for (const p of passives.slice(0, 15)) {
+          const conf = p.confidence === 'low' ? ' [low confidence: adjectival or irregular-form use likely]' : '';
+          const par = p.withPar ? ` (+ par agent)` : '';
+          lines.push(`- "${p.aux} ${p.participle}"${par}${conf} — "${truncate(p.sentenceText, 90)}" (position ${p.index})`);
+        }
+        if (passives.length > 15) lines.push(`- ...and ${passives.length - 15} more`);
+      }
+
+      lines.push('');
+      const quoted = voiceReport.quotedIgnored > 0 ? ` (${voiceReport.quotedIgnored} more inside « » quotations, not counted)` : '';
+      const forms = (top: Array<{ word: string; count: number }>) => top.map((t) => `${t.word} (${t.count}x)`).join(', ');
+      const wrong = voice === 'vous' ? 'tu' : 'vous';
+      const wrongCount = voice === 'vous' ? voiceReport.tuCount : voiceReport.vousCount;
+      const wrongFirst = voice === 'vous' ? voiceReport.tuFirstIndex : voiceReport.vousFirstIndex;
+      const wrongTop = voice === 'vous' ? voiceReport.tuTop : voiceReport.vousTop;
+      const rightCount = voice === 'vous' ? voiceReport.vousCount : voiceReport.tuCount;
+      const rightFirst = voice === 'vous' ? voiceReport.vousFirstIndex : voiceReport.tuFirstIndex;
+      if (wrongCount > 0 && rightCount > 0) {
+        lines.push(`Voice consistency: MIXED (expected ${voice}): ${wrong}-forms ${wrongCount}x at position ${wrongFirst} (${forms(wrongTop)}), ${voice}-forms ${rightCount}x at position ${rightFirst} — pick one address form.${quoted}`);
+      } else if (wrongCount > 0) {
+        lines.push(`Voice consistency: ${wrong}-forms used ${wrongCount}x (expected ${voice}), first at position ${wrongFirst}: ${forms(wrongTop)} — address the reader with "${voice}".${quoted}`);
+      } else {
+        lines.push(`Voice consistency: OK (expected ${voice}; ${voice}-forms ${rightCount}x, ${wrong}-forms 0x).${quoted}`);
+      }
+      for (const h of voiceReport.hits.filter((x) => x.form === wrong).slice(0, 10)) {
+        lines.push(`- "${h.word}" (position ${h.index})`);
+      }
+      lines.push(`  Only pronouns and possessives are detected; a tu imperative without a pronoun is not.`);
+
+      return { content: [{ type: 'text', text: lines.join('\n') }] };
+    } catch (e) {
+      return {
+        content: [{ type: 'text', text: `B1 check failed: ${(e as Error).message}` }],
+        isError: true,
+      };
+    }
+  })
+);
+
 type CheckResult = { content: Array<{ type: 'text'; text: string }>; isError?: boolean };
 
 /**
@@ -435,7 +606,7 @@ function withInput<A extends SourceArgs>(
     }
     const result = await check({ ...args, text: input.text });
     const first = result.content[0];
-    if (first && first.type === 'text' && !first.text.startsWith('B1 check failed')) {
+    if (first && first.type === 'text' && !/^(?:B1 check failed|French dictionary not found)/.test(first.text)) {
       const lines = first.text.split('\n');
       lines.splice(1, 0, input.summary);
       first.text = lines.join('\n');
@@ -576,6 +747,31 @@ server.tool(
   async ({ word }) => {
     const clean = word.trim();
     const results = await hunspellWords([clean]);
+    const r = results.get(clean);
+    if (!r) {
+      return { content: [{ type: 'text', text: `Could not check "${clean}".` }], isError: true };
+    }
+    if (r.correct) {
+      return { content: [{ type: 'text', text: `"${clean}" is spelled correctly.` }] };
+    }
+    const sug = r.suggestions.length ? r.suggestions.join(', ') : '(no suggestions)';
+    return { content: [{ type: 'text', text: `"${clean}" is NOT correct. Suggestions: ${sug}` }] };
+  }
+);
+
+/**
+ * validate_french_word: quick local yes/no + suggestions for one word.
+ */
+server.tool(
+  'validate_french_word',
+  'Quickly check a single French word locally for correct spelling (Dicollecte "toutes variantes", straight or typographic apostrophe), with suggestions for spelling errors.',
+  {
+    word: z.string().describe('Single French word'),
+  },
+  async ({ word }) => {
+    const clean = word.trim();
+    if (!dictAvailable('fr')) return { content: [{ type: 'text', text: FRENCH_DICT_MISSING }], isError: true };
+    const results = await hunspellWords([clean], 'fr');
     const r = results.get(clean);
     if (!r) {
       return { content: [{ type: 'text', text: `Could not check "${clean}".` }], isError: true };

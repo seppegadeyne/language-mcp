@@ -6,7 +6,7 @@ Guidelines for AI agents (Hermes, etc.) working in this repository.
 
 - **Spell-check engine: C hunspell binary, NOT pure JavaScript (nspell).**
   We invoke the `hunspell` C binary through the `-a`/ispell pipe
-  (`src/hunspell.ts`) for Dutch and US English checks. This is a deliberate
+  (`src/hunspell.ts`) for Dutch, US English, and French checks. This is a deliberate
   decision; see [ADR 001](docs/adr/001-hunspell-binary-over-nspell.md).
   The key reason: the `-a` pipe checks each part of words separated by hyphens
   or em dashes ("data-driven", "real-time"). nspell has no equivalent, so we
@@ -19,12 +19,12 @@ Guidelines for AI agents (Hermes, etc.) working in this repository.
 
 ## Tool naming (since v0.3.0)
 
-- `check_<language>_text` → check the spelling of a complete text (`dutch` or `us_english`).
+- `check_<language>_text` → check the spelling of a complete text (`dutch`, `us_english`, or `french`).
 - `validate_<language>_word` → check a single word: yes/no plus suggestions.
 - `get_dutch_word_details` → detailed lemma data from woordenlijst.org (network access).
 - Naming convention: verb + language + object. Do not omit the verb prefix
   (for example, `dutch_word_details` is obsolete and has been renamed).
-- Use consistent language identifiers: `dutch` and `us_english`.
+- Use consistent language identifiers: `dutch`, `us_english`, and `french`.
 
 ## B1 simplicity layer (since v0.4.0)
 
@@ -96,6 +96,23 @@ Guidelines for AI agents (Hermes, etc.) working in this repository.
 - `LANGUAGE_MCP_ROOTS` optionally restricts readable folders. Keep the file
   limit, binary and UTF-8 refusals; add a test for every new input rule.
 
+## French layer (since v0.10.0)
+
+- `check_french_text`, `check_french_b1_text`, `validate_french_word`; details,
+  limits, and licenses in `docs/french.md`.
+- Dictionary: Dicollecte/Grammalecte v7.7 "toutes variantes" (MPL 2.0), bundled as
+  `assets/fr.dic`/`fr.aff` with `assets/fr-SOURCE.txt` provenance. A missing
+  dictionary gives a clear `French dictionary not found` error from the spelling
+  tools, and the B1 tool skips only its passive section.
+- Readability is Kandel & Moles (1958), not Flesch-Douma or Flesch. Syllables
+  come from `src/syllables-fr.ts` (heuristic; mute final e not counted). Keep
+  the accuracy statement in `docs/french.md` honest when changing its rules.
+- The fr morphology (`-m`) has no single participle tag; `src/passive-fr.ts`
+  combines `st:` stems with a closed list. Precision first: skip être-compound
+  participles and reflexives rather than guess.
+- The default address form is `vous` (website copy). The tu/vous detector
+  (`src/voice-fr.ts`) matches pronouns and possessives only.
+
 ## Development practices
 
 - TypeScript, Node 18+. Tests: `npx tsx --test tests/*.test.ts` (node:test + assert).
@@ -114,12 +131,12 @@ Guidelines for AI agents (Hermes, etc.) working in this repository.
 - Preserve identifiers, API contracts, dictionary contents, upstream license
   and attribution files, Dutch test fixtures, and British detector inputs.
   Dutch words and upstream response values are language data, not prose to translate.
-- The server currently supports Dutch and US English. Describe additional
-  languages as extensions that require dictionaries, rules, and tools, not
-  as languages already supported.
+- The server currently supports Dutch, US English, and French. Describe
+  additional languages as extensions that require dictionaries, rules, and
+  tools, not as languages already supported.
 
 ## Dependencies and runtime
 
-- The `hunspell` executable and dictionaries (Dutch and US English) must be
+- The `hunspell` executable and dictionaries (Dutch, US English, and French) must be
   available. Dictionaries are bundled in `assets/`, with system dictionaries
   as fallbacks. This is an intentional runtime dependency (see ADR 001).

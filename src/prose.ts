@@ -35,7 +35,7 @@ export interface Paragraph {
   text: string;
 }
 
-export type ProseLang = 'nl' | 'en';
+export type ProseLang = 'nl' | 'en' | 'fr';
 
 const WORD_RE = /[A-Za-z\u00C0-\u024F][A-Za-z\u00C0-\u024F'’-]*/g;
 
@@ -54,6 +54,14 @@ const ABBREVIATIONS: Record<ProseLang, string[]> = {
     'oct', 'nov', 'dec', 'max', 'min', 'incl', 'excl', 'ca', 'ft', 'lb', 'oz',
     // Not listed on purpose: "no", "co", "est", "mar", "jun": those are also
     // ordinary words that can end a sentence ("The answer is no.").
+  ],
+  fr: [
+    'mme', 'mlle', 'mm', 'dr', 'pr', 'mgr', 'st', 'ste', 'etc', 'cf', 'env',
+    'tél', 'av', 'bd', 'fig', 'pp', 'vol', 'p.ex', 'c.-à-d', 'qqch', 'qqn',
+    'max', 'min', 'réf', 'éd', 'cie', 'ets', 'sté', 'incl', 'excl', 'ca',
+    'n.b', 'p.s', 'a.m', 'p.m', 'j.-c', 'e.g', 'i.e',
+    // Not listed on purpose: "est" (ordinary verb) and single letters ("M."
+    // is covered by the capital-initial rule below).
   ],
 };
 

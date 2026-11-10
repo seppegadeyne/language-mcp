@@ -1,11 +1,11 @@
 # language-mcp
 
-A local MCP server for Dutch and US English language checks, built for AI agents
+A local MCP server for Dutch, US English, and French language checks, built for AI agents
 (Hermes, Claude, and others) that write resumes, cover letters, blog articles,
 and website copy.
 
-**Currently supported: Dutch and US English.** Additional languages can be
-implemented by adding dictionaries, language-specific rules, and MCP tools;
+**Currently supported: Dutch, US English, and French.** Additional languages can
+be implemented by adding dictionaries, language-specific rules, and MCP tools;
 they are not supported automatically by selecting an arbitrary language.
 
 ## Tools
@@ -18,6 +18,9 @@ they are not supported automatically by selecting an arbitrary language.
 | `check_dutch_text` | OpenTaal/hunspell + selected spelling rules (local) | No | Check words and selected compounds, hyphens, and calendar capitalization; return suggestions, positions, rule IDs, explanations, confidence, and source links |
 | `check_dutch_b1_text` | OpenTaal/hunspell `-m` + rule layers (local) | No | B1 simplicity proxies: readability (Flesch-Douma, ARI, LIX, Brouwer Leesindex), sentence/paragraph length, passive voice, officialese jargon, filler, idioms, rare-word flags from a Zipf frequency table with plain-synonym suggestions (Open Dutch WordNet), nominalization density, je/u voice |
 | `validate_dutch_word` | OpenTaal/hunspell (local) | No | Check a single Dutch word locally for correct spelling, with suggestions |
+| `check_french_text` | hunspell fr (Dicollecte, "toutes variantes") (local) | No | Spell-check French text: unknown words with suggestions and positions; elisions with straight or typographic apostrophes, hyphenated words, and non-breaking spaces handled |
+| `check_french_b1_text` | hunspell fr `-m` + rule layers (local) | No | B1 plain-language proxies: readability (Kandel & Moles), sentence/paragraph length, passive voice (être + participle), tu/vous address form (default `vous`) |
+| `validate_french_word` | hunspell fr (local) | No | Check a single French word for correct spelling and suggest replacements |
 | `get_dutch_word_details` | woordenlijst.org (MolexServe) | Yes | Retrieve lemma details: part of speech, pronunciation, hyphenation, paradigm, and diminutive forms |
 
 The local tools use bundled hunspell dictionaries: OpenTaal for Dutch (v2.20.23)
@@ -25,6 +28,9 @@ and SCOWL/LibreOffice en_US for US English. The detector for British forms
 catches terms that hunspell does not flag (`whilst`, `towards`, `bespoke`,
 `webshop`, `sole trader`, `findability`, etc.), including categories from the
 Straffe Sites US English guidelines, and provides a US replacement for each match.
+
+French uses the Dicollecte/Grammalecte dictionary (v7.7, "toutes variantes": both traditional
+and 1990 reform spellings are accepted). Details, limits, and licenses: [French checks](docs/french.md).
 
 `get_dutch_word_details` queries the internal XML service at woordenlijst.org
 (INT/Taalunie). This unofficial integration uses caching and rate limiting
@@ -141,10 +147,31 @@ English formulas, thresholds, and rule sources:
   references to the reader ("users", "the customer") are reported when the
   expected address is "you" (default).
 
+### French
+
+`check_french_b1_text` applies the same approach to French (details and honest
+accuracy statements in [docs/french.md](docs/french.md)):
+
+- Readability: Kandel & Moles (1958), the French adaptation of Flesch Reading Ease
+  (`207 - 1.015 * words/sentences - 73.6 * syllables/words`), with a French syllable
+  counter in its own module (mute final e not counted). The same short-sample guard
+  applies, and the score is an estimate because syllables are counted heuristically.
+- Sentence and paragraph length: defaults warn above 20 and flag above 25 words per
+  sentence, 150 per paragraph; all are tool parameters.
+- Passive voice: être + past participle, precision first. Regular `-é` participles come
+  from the dictionary morphology, common irregular ones from a closed list; participles
+  of verbs that take être in compound tenses (`arrivé`, `parti`) and reflexive forms are
+  skipped. Hits are review flags.
+- Address form: `voice` defaults to `vous` and reports `tu`, `toi`, `te`, `t'`, `ton`, `ta`,
+  `tes`, `tien(ne)(s)` (or the reverse for `voice: tu`). Quotations in « » are reported
+  separately.
+- No B1 verdict, no jargon or wordy-phrase layers.
+
 ## Checking a file: `path`, ranges, and hashes
 
-The four check tools (`check_dutch_text`, `check_dutch_b1_text`,
-`check_us_english_text`, `check_us_english_b1_text`) accept either `text` or
+The six check tools (`check_dutch_text`, `check_dutch_b1_text`,
+`check_us_english_text`, `check_us_english_b1_text`, `check_french_text`,
+`check_french_b1_text`) accept either `text` or
 `path`. With `path`, the server reads the local UTF-8 file itself, so an agent
 never has to retype a long document into a tool call. Every report includes an
 `Input:` line with the SHA-256 of the exact text that was checked:
@@ -189,7 +216,8 @@ It provides suggestions and positions for flagged words. Review suggestions in
 context: proper names and technical terms may be valid even when flagged.
 For plain-language checks on the same copy, call `check_us_english_b1_text`
 with the same text. For Dutch copy, use `check_dutch_text` and
-`check_dutch_b1_text` instead.
+`check_dutch_b1_text` instead; for French copy, use `check_french_text` and
+`check_french_b1_text`.
 
 ## Installation
 
@@ -225,6 +253,8 @@ Code: MIT.
 Dictionary assets:
 - `assets/nl.dic` / `assets/nl.aff`: © OpenTaal — Revised BSD License and/or CC BY 3.0. Full terms are in `assets/LICENSE.txt`; source: https://github.com/OpenTaal/opentaal-hunspell. Reusing these assets requires attribution to OpenTaal.
 - `assets/en_US.dic` / `assets/en_US.aff`: based on the SCOWL word list (Kevin Atkinson, LGPL), with an affix file from Geoff Kuenning's Ispell (BSD), distributed through LibreOffice/dictionaries. See `assets/en_US-LICENSE.txt` and `assets/en_US-README.txt`; source: https://github.com/LibreOffice/dictionaries/tree/master/en.
+
+- `assets/fr.dic` / `assets/fr.aff`: French dictionary from Dicollecte/Grammalecte v7.7 by Olivier R., variant "toutes variantes", © the Dicollecte contributors, licensed under the Mozilla Public License 2.0. Source: https://grammalecte.net/ (archive https://grammalecte.net/download/fr/dic/hunspell-french-dictionaries-v7.7.zip, downloaded 2026-11-10, SHA-256 and provenance cross-check in `assets/fr-SOURCE.txt`). The files are unmodified copies. See `assets/fr-LICENSE-MPL-2.0.txt` and `assets/fr-README.txt`. MPL 2.0 is file-level copyleft: it applies to these dictionary files, not to the MIT-licensed code, and changes to the dictionary files themselves must stay under MPL 2.0.
 
 Data assets (each bundled with its own license and attribution file, kept
 separate from the MIT code):
