@@ -21,7 +21,10 @@
  * Detection per sentence: an être form (including n'/j'/qu' elisions and
  * inversion: est-il, sont-elles), or "été" after an avoir form, followed by
  * at most three bridge tokens (pas, jamais, déjà, adverbs in -ment, été,
- * étant) and then a participle. A "par" agent within six tokens is reported.
+ * étant) and then a participle. Frequent non-participles that share a
+ * spelling with a verb form (plus, lui, tu, puis, suis) and finite endings
+ * (-ais, -ai, -ois) are excluded; the lists were checked against the
+ * participle tags of Lexique 3.83 (evaluation only, not bundled). A "par" agent within six tokens is reported.
  * Participles that usually describe a state (situé, basé, conçu, destiné,
  * équipé, ...) are low confidence. Known limits: pronominal passives ("se
  * fait"), passives with a stand-alone participle after a noun phrase ("a été
@@ -56,8 +59,9 @@ const HAVE_AUX = new Set([
 const PRONOUN_AFTER_HYPHEN = /^(?:t-)?(?:il|elle|on|ils|elles|ce|je|tu|nous|vous)$/;
 
 const BRIDGE = new Set([
-  'pas', 'plus', 'jamais', 'déjà', 'encore', 'toujours', 'aussi', 'bien', 'tout',
-  'très', 'trop', 'souvent', 'parfois', 'ensuite', 'alors', 'ici', 'été', 'étant',
+  'pas', 'plus', 'ne', 'point', 'guère', 'donc', 'ainsi', 'enfin', 'vite',
+  'jamais', 'déjà', 'encore', 'toujours', 'aussi', 'bien', 'tout', 'très',
+  'trop', 'souvent', 'parfois', 'ensuite', 'alors', 'ici', 'été', 'étant',
 ]);
 const BRIDGE_MAX = 3;
 const PAR_WINDOW = 6;
@@ -85,8 +89,20 @@ const IRREGULAR = new Set([
   'prédit', 'inscrit', 'décrit', 'prescrit', 'souscrit', 'transcrit',
   'acquis', 'requis', 'conquis', 'élu', 'relu', 'ému', 'assis', 'revu',
   'sous-entendu', 'entendu', 'perdu', 'rendu', 'vendu', 'attendu', 'répondu',
-  'suivi', 'poursuivi', 'servi', 'ouvert', 'rouvert',
+  'suivi', 'poursuivi', 'servi', 'rouvert', 'recouvert', 'craint', 'rejoint',
+  'plaint', 'enfreint', 'feint', 'teint', 'astreint', 'cuit', 'extrait',
+  'distrait', 'soustrait', 'clos',
 ]);
+
+// Frequent words that the morphology also reads as a form of an -ir/-re/-oir
+// verb (plus = plaire, lui = luire, tu = taire, suis = suivre): never a
+// participle after être in running prose.
+const NOT_PARTICIPLE = new Set([
+  'plus', 'lui', 'tu', 'puis', 'suis', 'dis', 'lis', 'ris', 'vis', 'fis', 'fus',
+  'pus', 'tue', 'tues', 'fous',
+]);
+// Finite endings (imparfait, futur, présent in -ois/-ais) are never participles.
+const FINITE_ENDING = /(?:ai|ais|aie|aies|ois|oie|oies)$/;
 
 // State-like participles after "être": adjectival use likely.
 const ADJECTIVAL = new Set([
@@ -95,11 +111,19 @@ const ADJECTIVAL = new Set([
   'adapté', 'réservé', 'spécialisé', 'dédié', 'limité', 'connu', 'reconnu',
   'formé', 'qualifié', 'expérimenté', 'motivé', 'intéressé', 'concerné',
   'convaincu', 'satisfait', 'attendu', 'entendu', 'perdu', 'suivi', 'servi',
+  'fatigué', 'désolé', 'obligé', 'occupé', 'pressé', 'enchanté', 'étonné',
+  'surpris', 'déçu', 'ému', 'assis', 'passionné', 'habitué', 'marié', 'censé',
+  'préoccupé', 'soulagé', 'navré', 'gêné', 'déterminé', 'engagé', 'élevé',
+  'compliqué', 'approprié', 'isolé', 'varié', 'privé', 'réputé', 'détaillé',
+  'distrait', 'clos', 'dû',
+  // Professions and statuses after être: "il est député", "elle est salariée".
+  'député', 'employé', 'retraité', 'salarié', 'associé', 'diplômé',
 ]);
 
 /** Masculine-singular lookup candidates for a possibly inflected form. */
 function candidates(w: string): string[] {
-  return [w, w.replace(/s$/, ''), w.replace(/e$/, ''), w.replace(/es$/, '')];
+  // "miss" is not a plural of "mis": a form in -s takes no second s.
+  return [w, w.replace(/(?<!s)s$/, ''), w.replace(/e$/, ''), w.replace(/es$/, '')];
 }
 
 export function isIrregularParticipleFr(w: string): boolean {
@@ -118,12 +142,13 @@ function isMorphCandidate(w: string): boolean {
 /** Participle check; returns the confidence, or null when not a participle. */
 export function participleConfidenceFr(word: string, info: MorphInfo | undefined): 'high' | 'low' | null {
   const w = word.toLowerCase();
-  if (isEtreCompound(w)) return null;
+  if (isEtreCompound(w) || NOT_PARTICIPLE.has(w)) return null;
   const adjectival = candidates(w).some((c) => ADJECTIVAL.has(c));
   if (isIrregularParticipleFr(w)) return adjectival ? 'low' : 'high';
   if (!info) return null;
   const stems = info.stems.filter((s) => s !== w);
   if (/(?:é|ée|és|ées)$/.test(w) && stems.some((s) => /er$/.test(s))) return adjectival ? 'low' : 'high';
+  if (FINITE_ENDING.test(w)) return null;
   if (/(?:i|ie|is|ies|u|ue|us|ues)$/.test(w) && stems.some((s) => /(?:ir|re|oir)$/.test(s))) return 'low';
   return null;
 }

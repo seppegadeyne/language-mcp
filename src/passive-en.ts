@@ -140,7 +140,8 @@ export async function detectPassivesEn(sentences: Sentence[]): Promise<PassiveHi
           pIndex = j;
           break;
         }
-        const isBridge = BRIDGE.has(next) || BE_AUX.has(next) || (/ly$/.test(next) && next.length > 4);
+        // A dotted abbreviation (e.g., i.e.) between auxiliary and participle is a bridge too.
+        const isBridge = BRIDGE.has(next) || BE_AUX.has(next) || next.includes('.') || (/ly$/.test(next) && next.length > 4);
         if (!isBridge || ++bridged > BRIDGE_MAX) break;
       }
       if (participle === null) continue;

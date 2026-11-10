@@ -177,15 +177,15 @@ describe('French tools over MCP (scrubbed env, source server)', { timeout: 12000
       const a = await b1(CAT);
       assert.ok(!a.isError, a.text);
       assert.match(a.text, /^French B1 plain-language check \(B1 proxies, not a validated B1 verdict\)/);
-      assert.match(a.text, /- Kandel & Moles: 127\.3 \(band: above-b1; B1 target 60-70/);
+      assert.match(a.text, /- Kandel & Moles: 127\.3 \(band: easier than B1; B1 target 60-70/);
       assert.match(a.text, /- Words: 60, sentences: 10, avg 6 words\/sentence/);
       const b = await b1(MIXED);
-      assert.match(b.text, /- Kandel & Moles: 115 \(band: above-b1/);
+      assert.match(b.text, /- Kandel & Moles: 115 \(band: easier than B1/);
     });
 
     it('honors the band minimum parameter', async () => {
       const r = await b1(MIXED, { kandel_moles_min: 40 });
-      assert.match(r.text, /Kandel & Moles: 115 \(band: above-b1; B1 target 40-70/);
+      assert.match(r.text, /Kandel & Moles: 115 \(band: easier than B1; B1 target 40-70/);
     });
 
     it('applies the sentence limits as parameters (defaults warn 20, flag 25)', async () => {
@@ -232,7 +232,28 @@ describe('French tools over MCP (scrubbed env, source server)', { timeout: 12000
     it('reports quoted tu forms separately', async () => {
       const r = await b1('Un client écrit : « Tu as sauvé mon chantier. » Vous êtes rapides.');
       assert.match(r.text, /Voice consistency: OK/);
-      assert.match(r.text, /\(2 more inside « » quotations, not counted\)|\(1 more inside « » quotations, not counted\)/);
+      assert.match(r.text, /\(1 more inside quotations, not counted\)/);
+    });
+
+    it('counts one-letter words and finds "a été" + participle', async () => {
+      const r = await b1('Le rapport a été envoyé à la direction. Il y a un ami à Paris.');
+      assert.match(r.text, /- Words: 15, sentences: 2/);
+      assert.match(r.text, /- "a été envoyé" — "Le rapport a été envoyé à la direction\."/);
+    });
+
+    it('does not read "est plus" or "est lui" as a passive', async () => {
+      const r = await b1('Ce produit est plus sûr. Le client est lui aussi content. Je suis ici, puis je pars.');
+      assert.match(r.text, /Passive voice[^\n]*\n- None detected\./);
+    });
+
+    it('returns a clear error for an empty word', async () => {
+      for (const tool of ['validate_french_word', 'validate_dutch_word', 'validate_us_english_word']) {
+        for (const word of ['  ', '—', '×']) {
+          const r = await call(tool, { word });
+          assert.ok(r.isError);
+          assert.match(r.text, /^Input error: word is empty or has no letters/);
+        }
+      }
     });
 
     it('survives a scrubbed environment with accents and NBSP before punctuation', async () => {

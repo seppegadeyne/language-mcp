@@ -84,11 +84,26 @@ describe('English readability', () => {
   });
 
   it('bands Flesch Reading Ease scores with a configurable minimum', () => {
-    assert.equal(fleschReadingEaseBand(65), 'b1');
-    assert.equal(fleschReadingEaseBand(80), 'above-b1');
-    assert.equal(fleschReadingEaseBand(55), 'below-b1');
-    assert.equal(fleschReadingEaseBand(40), 'hard');
-    assert.equal(fleschReadingEaseBand(55, 50), 'b1');
+    assert.equal(fleschReadingEaseBand(65), 'B1');
+    assert.equal(fleschReadingEaseBand(80), 'easier than B1');
+    assert.equal(fleschReadingEaseBand(55), 'harder than B1');
+    assert.equal(fleschReadingEaseBand(40), 'much harder than B1');
+    assert.equal(fleschReadingEaseBand(55, 50), 'B1');
+    // A minimum above 70 moves the lower edge: 72 is then below the target.
+    assert.equal(fleschReadingEaseBand(72, 75), 'harder than B1');
+    assert.equal(fleschReadingEaseBand(75, 75), 'B1');
+    assert.equal(fleschReadingEaseBand(80, 75), 'B1');
+  });
+
+  it('counts a dotted abbreviation as one word and bridges it in a passive', async () => {
+    const { sentences } = analyzeProse('We met in the U.S. on Monday, e.g. at noon. The form was e.g. signed.', 'en');
+    assert.deepEqual(sentences.map((s) => s.words.length), [10, 5]);
+    assert.deepEqual((await detectPassivesEn(sentences)).map((h) => h.participle), ['signed']);
+  });
+
+  it('counts one-letter words (a, I) as words', () => {
+    const { sentences } = analyzeProse('I saw a cat. It is a pet I like.', 'en');
+    assert.deepEqual(sentences.map((s) => s.words.length), [4, 6]);
   });
 });
 

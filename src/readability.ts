@@ -166,12 +166,28 @@ export function computeReadability(
   };
 }
 
-/** Practical B1 band for Flesch-Douma: ~60-70. Below 60 = harder than B1. */
-export function fleschDoumaBand(score: number): 'b1' | 'above-b1' | 'below-b1' | 'hard' {
-  if (score >= 60 && score <= 70) return 'b1';
-  if (score > 70) return 'above-b1';
-  if (score >= 45) return 'below-b1';
-  return 'hard';
+export type B1Band = 'B1' | 'easier than B1' | 'harder than B1' | 'much harder than B1';
+
+/**
+ * Band of a 0-100 reading-ease score (higher = easier). The label names the
+ * text, not the score: a score above 70 reads easier than B1. `min` is the
+ * tool parameter for the lower edge; `hardMargin` points below it the text
+ * counts as much harder.
+ */
+function readingEaseBand(score: number, min: number, hardMargin: number): B1Band {
+  if (score < min) return score >= min - hardMargin ? 'harder than B1' : 'much harder than B1';
+  // With a minimum above 70 there is no upper edge: meeting the target is B1.
+  return score > 70 && min < 70 ? 'easier than B1' : 'B1';
+}
+
+/** Target range for the report line: "60-70", or "75 or higher" when min is above the band. */
+export function bandTarget(min: number): string {
+  return min < 70 ? `${min}-70` : `${min} or higher`;
+}
+
+/** Practical B1 band for Flesch-Douma: ~60-70; below 45 (min - 15) is much harder. */
+export function fleschDoumaBand(score: number, min = 60): B1Band {
+  return readingEaseBand(score, min, 15);
 }
 
 /**
@@ -181,9 +197,6 @@ export function fleschDoumaBand(score: number): 'b1' | 'above-b1' | 'below-b1' |
  * B1 zone; 70+ is easier; 50-60 "fairly difficult"; below 50 "difficult".
  * The minimum is a tool parameter (default 60).
  */
-export function fleschReadingEaseBand(score: number, min = 60): 'b1' | 'above-b1' | 'below-b1' | 'hard' {
-  if (score >= min && score <= 70) return 'b1';
-  if (score > 70) return 'above-b1';
-  if (score >= 50) return 'below-b1';
-  return 'hard';
+export function fleschReadingEaseBand(score: number, min = 60): B1Band {
+  return readingEaseBand(score, min, 10);
 }

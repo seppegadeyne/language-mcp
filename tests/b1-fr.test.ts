@@ -10,9 +10,9 @@ import { detectPassivesFr } from '../src/passive-fr.js';
 
 describe('French syllables', () => {
   it('agrees with hand-checked counts (standard spoken prose, mute final e not counted)', () => {
-    // Hand-checked against the pronunciation of each word. The heuristic
-    // agrees on all of them by construction; there is no independent corpus
-    // measurement, so this list documents behavior rather than proving a rate.
+    // Hand-checked against the pronunciation of each word. The measured rate
+    // on Lexique 3.83 comes from tests/eval/syllables-fr-lexique.ts (see
+    // docs/french.md); this list anchors the rules behind that rate.
     const cases: Record<string, number> = {
       le: 1, la: 1, de: 1, que: 1, qui: 1, est: 1, pour: 1, nous: 1, vous: 1, ils: 1,
       dans: 1, 'très': 1, bien: 1, tout: 1, 'où': 1, aux: 1, point: 1, norme: 1, vie: 1,
@@ -33,6 +33,13 @@ describe('French syllables', () => {
       continuent: 3, 'Noël': 2, 'naïf': 2, 'maïs': 2,
       "l'ancrage": 2, "qu'il": 1, "d'un": 1, "j'ai": 1, "c'est": 1, "n'importe": 2,
       "jusqu'à": 2, "lorsqu'il": 2, 'arc-en-ciel': 3,
+      // i/u/ou glide before an accented vowel; hiatus after an obstruent + l/r cluster.
+      'société': 3, 'certifié': 3, 'vérifié': 3, 'première': 2, 'pièce': 1, 'tué': 1, 'joué': 1,
+      client: 2, clients: 2, ouvrier: 3, 'février': 3, crier: 2, 'publié': 3, 'bibliothèque': 4,
+      cruel: 2, influence: 3, bruit: 1, pluie: 1, fruit: 1, brouillard: 2, 'prière': 2,
+      pays: 2, paysage: 3, 'août': 1, alcool: 2, 'coopération': 5, 'conséquent': 3,
+      'fréquent': 2, accent: 2, dorment: 1, puissent: 1,
+      oubliera: 3, 'gruyère': 2, zoo: 2, 'employé': 3,
     };
     const wrong = Object.entries(cases)
       .filter(([w, n]) => countSyllablesFr(w) !== n)
@@ -40,9 +47,9 @@ describe('French syllables', () => {
     assert.deepEqual(wrong, []);
   });
 
-  it('documents known misses (hiatus after i, schwa variation, fixed expressions)', () => {
-    // client is [kli.ɑ̃] (2); i + vowel is read as one glide nucleus here.
-    assert.equal(countSyllablesFr('client'), 1);
+  it('documents known misses (schwa variation, fixed expressions, verb -ment)', () => {
+    // médecin is [med.sɛ̃] (2): a dropped schwa inside a word is still counted.
+    assert.equal(countSyllablesFr('médecin'), 3);
     // est-ce is [ɛs] (1); each hyphen part with a vowel letter counts at least 1.
     assert.equal(countSyllablesFr('est-ce'), 2);
     // Verb -ment endings outside the closed list read as nouns: "ils calment".
@@ -124,6 +131,11 @@ describe('French prose splitting', () => {
     assert.equal(sentences.length, 2);
   });
 
+  it('counts one-letter words: a, à, y', () => {
+    const { sentences } = analyzeProse('Il y a un ami à Paris.', 'fr');
+    assert.equal(sentences[0].words.length, 7);
+  });
+
   it('counts an elided clitic and a hyphenated word as one word each', () => {
     const { sentences } = analyzeProse("L'ancrage garde-corps peut-être sûr.", 'fr');
     assert.equal(sentences[0].words.length, 4);
@@ -169,6 +181,30 @@ describe('French address form (tu / vous)', () => {
     assert.equal(r.vousCount, 1);
   });
 
+  it('ignores curly and straight double quotations on one line', () => {
+    const r = analyzeVoiceFr('“Tu as bien fait”, dit-il. "Merci à toi." Vous êtes rapides.', 'vous');
+    assert.equal(r.tuCount, 0);
+    assert.equal(r.quotedIgnored, 2);
+  });
+
+  it('does not read an inch mark as an opening quote', () => {
+    const r = analyzeVoiceFr('Le panneau fait 24" de large. Tu peux le monter. Il fait 12" de haut.', 'vous');
+    assert.equal(r.tuCount, 1);
+    assert.equal(r.quotedIgnored, 0);
+  });
+
+  it('keeps a quoted word as context for the next word', () => {
+    // "ton" after the quoted determiner is the noun; no tu form is quoted.
+    const r = analyzeVoiceFr('Voici « le » ton parfait. « Un » ton calme.', 'vous');
+    assert.equal(r.tuCount, 0);
+    assert.equal(r.quotedIgnored, 0);
+  });
+
+  it("skips 'tu' as the participle of se taire, but keeps inversion", () => {
+    assert.equal(analyzeVoiceFr("Il s'est tu. Elles se sont tues.", 'vous').tuCount, 0);
+    assert.equal(analyzeVoiceFr('Où es-tu ?', 'vous').tuCount, 1);
+  });
+
   it('ignores URLs, emails, and code', () => {
     const r = analyzeVoiceFr('Voir https://exemple.fr/tu/ta ou `tu` et ton@exemple.fr.', 'vous');
     assert.equal(r.tuCount, 0);
@@ -207,6 +243,25 @@ describe('French passive proxy', () => {
   it('marks state-like and -ir/-re participles as low confidence', async () => {
     const hits = await detect("L'entreprise est située à Gand. Ce produit est vendu.");
     assert.deepEqual(hits.map((h) => `${h.participle}:${h.confidence}`), ['située:low', 'vendu:high']);
+  });
+
+  it('finds "a été" + participle (the one-letter auxiliary counts as a word)', async () => {
+    const hits = await detect('Le rapport a été envoyé hier. La porte a été ouverte par le gardien.');
+    assert.deepEqual(hits.map((h) => `${h.aux}|${h.participle}|${h.withPar}`), ['a été|envoyé|false', 'a été|ouverte|true']);
+  });
+
+  it('does not read frequent non-participles or finite verb forms as participles', async () => {
+    const hits = await detect(
+      'Ce produit est plus sûr. Le client est lui aussi content. Il est puis il part. Miss Dupont est miss France. Je suis, je crois, ravi.',
+    );
+    assert.deepEqual(hits.map((h) => h.participle), []);
+  });
+
+  it('marks emotional and state participles as low confidence', async () => {
+    const hits = await detect('Je suis désolé. La salle est occupée. Le prix est élevé.');
+    assert.deepEqual(hits.map((h) => `${h.participle}:${h.confidence}`), ['désolé:low', 'occupée:low', 'élevé:low']);
+    const jobs = await detect('Il est député. Elle est salariée chez nous.');
+    assert.ok(jobs.every((h) => h.confidence === 'low'));
   });
 
   it('does not flag être-compound tenses, reflexives, c\'est, or active sentences', async () => {

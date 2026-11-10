@@ -66,6 +66,19 @@ Guidelines for AI agents (Hermes, etc.) working in this repository.
 - Token and rule positions are offsets into the original text; never look
   them up with `text.indexOf(word)` (it matches inside other words).
 
+## Shared B1 conventions (all languages)
+
+- Prose word counts include one-letter words (`u`, `a`, `I`, `à`, `y`); only
+  the spelling tokenizer (`src/tokenize.ts`) skips them. A dotted abbreviation
+  (`o.a.`, `e.g.`) is one word. `hunspellMorph` accepts letter-only words:
+  hunspell prints no block for a symbol, which fails the whole batch.
+- Band labels name the text, not the score: `easier than B1`, `B1`,
+  `harder than B1`, `much harder than B1`. The minimum parameters
+  (`flesch_douma_min`, `flesch_min`, `kandel_moles_min`) move the band edge,
+  not only the label.
+- Run `npx tsx tests/eval/b1-amsterdam.ts` before and after a change to the
+  Dutch B1 layer and report the separation numbers (`docs/b1-eval.md`).
+
 ## Dutch contextual spelling layer (since v0.6.0)
 
 - `src/dutch-spelling.ts` adds selected compound, hyphen, and calendar rules
@@ -105,8 +118,10 @@ Guidelines for AI agents (Hermes, etc.) working in this repository.
   dictionary gives a clear `French dictionary not found` error from the spelling
   tools, and the B1 tool skips only its passive section.
 - Readability is Kandel & Moles (1958), not Flesch-Douma or Flesch. Syllables
-  come from `src/syllables-fr.ts` (heuristic; mute final e not counted). Keep
-  the accuracy statement in `docs/french.md` honest when changing its rules.
+  come from `src/syllables-fr.ts` (heuristic; mute final e not counted),
+  measured against Lexique 3.83 with `tests/eval/syllables-fr-lexique.ts`
+  (Lexique is CC BY-SA and not bundled). Re-measure before changing its rules
+  and keep the accuracy statement in `docs/french.md` honest.
 - The fr morphology (`-m`) has no single participle tag; `src/passive-fr.ts`
   combines `st:` stems with a closed list. Precision first: skip être-compound
   participles and reflexives rather than guess.

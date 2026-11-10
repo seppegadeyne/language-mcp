@@ -7,7 +7,7 @@ import { extractWords, scanWords, MAX_SPELL_WORDS, type Token } from './tokenize
 import { findBritticisms } from './britticisms.js';
 import { findDutchSpellingIssues } from './dutch-spelling.js';
 import { analyzeProse, wordTokens } from './prose.js';
-import { computeReadability, fleschDoumaBand, fleschReadingEaseBand } from './readability.js';
+import { bandTarget, computeReadability, fleschDoumaBand, fleschReadingEaseBand } from './readability.js';
 import { findB1Hits, findNominalizations, analyzeVoice } from './b1rules.js';
 import { getDutchZipf, frequencyTableAvailable } from './frequency.js';
 import { suggestSynonyms } from './synonyms.js';
@@ -21,7 +21,7 @@ import { inputErrorResult, resolveInput, sourceSchema, type SourceArgs } from '.
 const molex = new MolexClient();
 
 const server = new McpServer(
-  { name: 'language-mcp', version: '0.10.0' },
+  { name: 'language-mcp', version: '0.10.1' },
   { capabilities: { tools: {} } }
 );
 
@@ -163,8 +163,8 @@ server.tool(
       const nomReport = findNominalizations(text, stats.wordCount);
       const passives = await detectPassives(sentences);
 
-      const band = stats.fleschDouma !== null ? fleschDoumaBand(stats.fleschDouma) : null;
       const fdMin = flesch_douma_min ?? 60;
+      const band = stats.fleschDouma !== null ? fleschDoumaBand(stats.fleschDouma, fdMin) : null;
       const jargon = b1hits.filter((h) => h.category === 'jargon');
       const fillers = b1hits.filter((h) => h.category === 'filler');
       const idioms = b1hits.filter((h) => h.category === 'idiom');
@@ -175,7 +175,7 @@ server.tool(
       lines.push('');
       lines.push(`Readability:`);
       if (stats.fleschDouma !== null) {
-        lines.push(`- Flesch-Douma: ${stats.fleschDouma} (band: ${band}; B1 target ${fdMin}-70)`);
+        lines.push(`- Flesch-Douma: ${stats.fleschDouma} (band: ${band}; B1 target ${bandTarget(fdMin)})`);
       } else {
         lines.push(`- Flesch-Douma: n/a (sample below 50 words / fewer than 3 sentences; formulas unstable on short samples)`);
       }
@@ -338,7 +338,7 @@ server.tool(
       lines.push(`Readability:`);
       if (stats.fleschReadingEase !== null && stats.fleschKincaidGrade !== null) {
         const band = fleschReadingEaseBand(stats.fleschReadingEase, freMin);
-        lines.push(`- Flesch Reading Ease: ${stats.fleschReadingEase} (band: ${band}; B1 target ${freMin}-70)`);
+        lines.push(`- Flesch Reading Ease: ${stats.fleschReadingEase} (band: ${band}; B1 target ${bandTarget(freMin)})`);
         const gradeNote = stats.fleschKincaidGrade > gradeMax ? ` (above target ${gradeMax})` : ` (target ${gradeMax} or lower)`;
         lines.push(`- Flesch-Kincaid grade: ${stats.fleschKincaidGrade}${gradeNote}`);
       } else {
@@ -525,7 +525,7 @@ server.tool(
       lines.push(`Readability:`);
       if (stats.kandelMoles !== null) {
         const band = fleschReadingEaseBand(stats.kandelMoles, kmMin);
-        lines.push(`- Kandel & Moles: ${stats.kandelMoles} (band: ${band}; B1 target ${kmMin}-70; French adaptation of Flesch Reading Ease, not validated for B1)`);
+        lines.push(`- Kandel & Moles: ${stats.kandelMoles} (band: ${band}; B1 target ${bandTarget(kmMin)}; French adaptation of Flesch Reading Ease, not validated for B1)`);
       } else {
         lines.push(`- Kandel & Moles: n/a (sample below 50 words / fewer than 3 sentences; formulas unstable on short samples)`);
       }
@@ -557,7 +557,7 @@ server.tool(
       }
 
       lines.push('');
-      const quoted = voiceReport.quotedIgnored > 0 ? ` (${voiceReport.quotedIgnored} more inside « » quotations, not counted)` : '';
+      const quoted = voiceReport.quotedIgnored > 0 ? ` (${voiceReport.quotedIgnored} more inside quotations, not counted)` : '';
       const forms = (top: Array<{ word: string; count: number }>) => top.map((t) => `${t.word} (${t.count}x)`).join(', ');
       const wrong = voice === 'vous' ? 'tu' : 'vous';
       const wrongCount = voice === 'vous' ? voiceReport.tuCount : voiceReport.vousCount;
@@ -588,6 +588,9 @@ server.tool(
 );
 
 type CheckResult = { content: Array<{ type: 'text'; text: string }>; isError?: boolean };
+
+/** validate_*_word with an empty or blank word: hunspell would answer with zero blocks. */
+const EMPTY_WORD: CheckResult = { content: [{ type: 'text', text: 'Input error: word is empty or has no letters; pass a single word.' }], isError: true };
 
 /**
  * Resolve text/path (+ range, expected hash) before a check runs, then add one
@@ -716,6 +719,7 @@ server.tool(
   },
   async ({ word }) => {
     const clean = word.trim();
+    if (!/\p{L}/u.test(clean)) return EMPTY_WORD;
     const britts = findBritticisms(clean);
     const results = await hunspellWords([clean], 'en_US');
     const r = results.get(clean);
@@ -746,6 +750,7 @@ server.tool(
   },
   async ({ word }) => {
     const clean = word.trim();
+    if (!/\p{L}/u.test(clean)) return EMPTY_WORD;
     const results = await hunspellWords([clean]);
     const r = results.get(clean);
     if (!r) {
@@ -770,6 +775,7 @@ server.tool(
   },
   async ({ word }) => {
     const clean = word.trim();
+    if (!/\p{L}/u.test(clean)) return EMPTY_WORD;
     if (!dictAvailable('fr')) return { content: [{ type: 'text', text: FRENCH_DICT_MISSING }], isError: true };
     const results = await hunspellWords([clean], 'fr');
     const r = results.get(clean);

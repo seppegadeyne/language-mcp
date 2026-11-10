@@ -1,5 +1,5 @@
 /**
- * Tokenize Dutch or English text into checkable words.
+ * Tokenize Dutch, English, or French text into checkable words.
  * Keeps words with hyphens (koel-vries), apostrophes ('s morgens, geëind),
  * and strips surrounding punctuation. Skips numbers, URLs, emails, code.
  *
@@ -48,7 +48,8 @@ export function extractWords(text: string, maxWords = 2000): Token[] {
   t = t.replace(/```[\s\S]*?```/g, blanks).replace(/`[^`\n]*`/g, blanks);
 
   const tokens: Token[] = [];
-  for (const m of t.matchAll(/[A-Za-z\u00C0-\u024F][A-Za-z\u00C0-\u024F'’-]*/g)) {
+  // Letters only: × (U+00D7) and ÷ (U+00F7) sit inside the Latin-1 letter block.
+  for (const m of t.matchAll(/[A-Za-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u024F][A-Za-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u024F'’-]*/g)) {
     const w = m[0];
     let clean = w.replace(/['’-]+$/, ''); // trailing apostrophe/hyphen noise
     clean = clean.replace(/^['’]+/, '');

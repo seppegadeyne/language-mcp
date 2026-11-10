@@ -73,7 +73,8 @@ guideline: write new material at B1, aiming for A2), not an empirically
 validated text norm. What the tool measures:
 
 - Readability: Flesch-Douma reading ease (NL-adapted Flesch; practical B1
-  band ~60-70), ARI as a second, language-neutral indication, LIX
+  band ~60-70; the band label names the text: `easier than B1`, `B1`,
+  `harder than B1`, `much harder than B1`), ARI as a second, language-neutral indication, LIX
   (Björnsson 1968; Swedish scale, not validated for Dutch — compounds
   inflate it), and Brouwer Leesindex A (1963 Dutch Flesch recalibration
   that weighs sentence length twice as heavily as Flesch-Douma).
@@ -154,8 +155,9 @@ accuracy statements in [docs/french.md](docs/french.md)):
 
 - Readability: Kandel & Moles (1958), the French adaptation of Flesch Reading Ease
   (`207 - 1.015 * words/sentences - 73.6 * syllables/words`), with a French syllable
-  counter in its own module (mute final e not counted). The same short-sample guard
-  applies, and the score is an estimate because syllables are counted heuristically.
+  counter in its own module (mute final e not counted; 99.5% exact on the 10,000 most
+  frequent spellings of Lexique 3.83). The same short-sample guard applies, and the
+  score is an estimate because syllables are counted heuristically.
 - Sentence and paragraph length: defaults warn above 20 and flag above 25 words per
   sentence, 150 per paragraph; all are tool parameters.
 - Passive voice: être + past participle, precision first. Regular `-é` participles come
@@ -163,7 +165,7 @@ accuracy statements in [docs/french.md](docs/french.md)):
   of verbs that take être in compound tenses (`arrivé`, `parti`) and reflexive forms are
   skipped. Hits are review flags.
 - Address form: `voice` defaults to `vous` and reports `tu`, `toi`, `te`, `t'`, `ton`, `ta`,
-  `tes`, `tien(ne)(s)` (or the reverse for `voice: tu`). Quotations in « » are reported
+  `tes`, `tien(ne)(s)` (or the reverse for `voice: tu`). Quotations are reported
   separately.
 - No B1 verdict, no jargon or wordy-phrase layers.
 

@@ -2,7 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { countSyllables } from '../src/syllables.js';
 import { analyzeProse, stripNonProse, protectAbbreviations, splitSentences, wordTokens } from '../src/prose.js';
-import { computeReadability, fleschDoumaBand } from '../src/readability.js';
+import { bandTarget, computeReadability, fleschDoumaBand } from '../src/readability.js';
 import { findB1Hits, findNominalizations, analyzeVoice } from '../src/b1rules.js';
 import { detectPassives, hunspellMorph, isPastParticiple } from '../src/passive.js';
 
@@ -123,10 +123,33 @@ describe('readability', () => {
   });
 
   it('bands Flesch-Douma scores', () => {
-    assert.equal(fleschDoumaBand(65), 'b1');
-    assert.equal(fleschDoumaBand(75), 'above-b1');
-    assert.equal(fleschDoumaBand(50), 'below-b1');
-    assert.equal(fleschDoumaBand(30), 'hard');
+    assert.equal(fleschDoumaBand(65), 'B1');
+    assert.equal(fleschDoumaBand(75), 'easier than B1');
+    assert.equal(fleschDoumaBand(50), 'harder than B1');
+    assert.equal(fleschDoumaBand(30), 'much harder than B1');
+  });
+
+  it('applies the flesch_douma_min parameter to the band and the target label', () => {
+    assert.equal(fleschDoumaBand(55, 50), 'B1');
+    assert.equal(fleschDoumaBand(62, 65), 'harder than B1');
+    assert.equal(fleschDoumaBand(72, 75), 'harder than B1');
+    assert.equal(bandTarget(60), '60-70');
+    assert.equal(bandTarget(75), '75 or higher');
+  });
+
+  it('counts a dotted abbreviation as one word and never a math sign', () => {
+    const { sentences } = analyzeProse('Wij leveren o.a. hout i.v.m. de bouw van 3 × 4 meter.');
+    assert.deepEqual(sentences[0].words.map((w) => w.clean), ['wij', 'leveren', 'o.a', 'hout', 'i.v.m', 'de', 'bouw', 'van', 'meter']);
+  });
+
+  it('keeps text around a dot that is not followed by a space', () => {
+    const { sentences } = analyzeProse('De N.V.B. staakt vandaag.Morgen niet.');
+    assert.equal(sentences.reduce((n, s) => n + s.words.length, 0), 6);
+  });
+
+  it('counts the one-letter pronoun "u" as a word', () => {
+    const { sentences } = analyzeProse('Als u een aanvraag doet, krijgt u bericht.');
+    assert.equal(sentences[0].words.length, 8);
   });
 
   it('counts long sentences and paragraphs with custom thresholds', () => {
@@ -223,5 +246,15 @@ describe('passive voice', () => {
     assert.equal(hits.length, 1);
     assert.equal(hits[0].kind, 'zijn-passive');
     assert.equal(hits[0].confidence, 'low');
+  });
+
+  it('does not flag the active perfect of verbs that only take zijn', async () => {
+    const text = 'Het is duidelijk geworden. De kosten zijn gestegen. Zij is aangekomen. De omzet is toegenomen. Hij is thuis gebleven. Dat is gelukt.';
+    const hits = await detectPassives(analyzeProse(text).sentences);
+    assert.deepEqual(hits.map((h) => h.participle), []);
+    const passive = await detectPassives(analyzeProse(
+      'Het pakket is verzonden. De deur is gesloten. De afspraak is nagekomen. Hij is aangevallen. Dit is u al eerder gemeld. De kamer is 3 × 4 meter en is verbouwd.',
+    ).sentences);
+    assert.deepEqual(passive.map((h) => h.participle), ['verzonden', 'gesloten', 'nagekomen', 'aangevallen', 'gemeld', 'verbouwd']);
   });
 });

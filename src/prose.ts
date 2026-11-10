@@ -37,7 +37,10 @@ export interface Paragraph {
 
 export type ProseLang = 'nl' | 'en' | 'fr';
 
-const WORD_RE = /[A-Za-z\u00C0-\u024F][A-Za-z\u00C0-\u024F'’-]*/g;
+// Letters only: the Latin-1 block also holds the signs × (U+00D7) and ÷ (U+00F7).
+const L = 'A-Za-z\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u024F';
+// A dotted abbreviation (o.a., i.v.m., e.g., U.S.) is one word, not one per letter.
+const WORD_RE = new RegExp(`(?<![${L}])[A-Za-z](?:\\.[A-Za-z])+(?![${L}])|[${L}][${L}'’-]*`, 'g');
 
 // Abbreviations whose dot must not end a sentence (lowercase, no final dot).
 const ABBREVIATIONS: Record<ProseLang, string[]> = {
@@ -124,7 +127,9 @@ export function splitSentences(protectedText: string): Array<{ text: string; sta
   const out: Array<{ text: string; start: number; end: number }> = [];
   // Closing quotes/brackets may follow the terminator: straight, curly
   // (US style: “Stop.” Then...), and guillemets.
-  const re = /[^.!?…\n]+(?:[.!?…]+["'»”’)\]]*(?=\s|$)|(?=\n)|$)/g;
+  // A dot directly followed by a letter or digit (S.N.C.F., Node.js, "€.Livraison")
+  // stays inside the sentence; without that branch the text before it was skipped.
+  const re = /(?:[^.!?…\n]|\.(?=[\p{L}\d]))+(?:[.!?…]+["'»”’)\]]*(?=\s|$)|(?=\n)|$)/gu;
   let m: RegExpExecArray | null;
   while ((m = re.exec(protectedText)) !== null) {
     const raw = m[0];
@@ -148,7 +153,9 @@ export function wordTokens(text: string): WordToken[] {
   while ((m = WORD_RE.exec(text)) !== null) {
     let clean = m[0].replace(/['’-]+$/, '');
     clean = clean.replace(/^['’]+/, '');
-    if (clean.length < 2) continue;
+    // One-letter words count: "a", "I", "u", "à", "y" are frequent, and the
+    // French passive needs "a" as an auxiliary ("a été envoyé").
+    if (clean.length < 1) continue;
     tokens.push({ raw: m[0], clean: clean.toLowerCase(), start: m.index, end: m.index + m[0].length });
   }
   return tokens;

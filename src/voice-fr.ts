@@ -15,12 +15,14 @@
  * - vous forms: vous, votre, vos, vôtre(s) (vous-même is covered by "vous").
  * - "ton" after a determiner (un ton, le ton, notre ton) is the noun "tone",
  *   not the possessive, and is skipped.
- * - Text inside « guillemets » is quotation (testimonials, citations) and is
- *   reported separately, not counted as the text's own address form.
+ * - Text inside « guillemets », “curly quotes”, or "straight quotes" on one
+ *   line is quotation (testimonials, citations) and is reported separately,
+ *   not counted as the text's own address form.
+ * - "tu" right after a form of être is the participle of "se taire" (il
+ *   s'est tu) and is skipped; inversion (es-tu) is still reported.
  * - Code, URLs, and emails are ignored (same strips as the other B1 layers).
  *
- * Known false-positive risks: "tu" is also the past participle of "se taire"
- * (il s'est tu); "ta", "te", "ton", "tes" occur in non-French fragments
+ * Known false-positive risks: "ta", "te", "ton", "tes" occur in non-French fragments
  * (Latin "Te Deum", Italian, product codes); "tiens" is also the imperative
  * of "tenir" when it follows an article-like word. Review every hit.
  */
@@ -43,7 +45,7 @@ export interface VoiceReportFr {
   vousCount: number;
   vousFirstIndex: number | null;
   vousTop: Array<{ word: string; count: number }>;
-  /** tu/vous forms inside « » quotations, excluded from the counts above. */
+  /** tu/vous forms inside quotations, excluded from the counts above. */
   quotedIgnored: number;
   hits: VoiceHitFr[];
 }
@@ -53,11 +55,18 @@ const TU_RE = new RegExp(String.raw`(?<![${LETTER}])(?:(?:tu|toi|te|ton|ta|tes|t
 const VOUS_RE = new RegExp(String.raw`(?<![${LETTER}])(?:vous|votre|vos|vôtres?)(?![${LETTER}])`, 'giu');
 
 const ARTICLES_FOR_TIEN = new Set(['le', 'la', 'les', 'du', 'des', 'au', 'aux', 'un', 'une', 'ce', 'cette', 'ces']);
+const ETRE_BEFORE_PARTICIPLE_TU = new Set(['est', 'sont', 'était', 'étaient', 'être', 'été', 'sera', 'seront']);
 const DETERMINERS_BEFORE_NOUN_TON = new Set(['un', 'le', 'ce', 'du', 'au', 'quel', 'notre', 'votre', 'mon', 'son', 'leur', 'aucun', 'chaque', 'ce', 'ton']);
 
 function previousWord(text: string, index: number): string {
-  const m = /([\p{L}]+)[\s\u00a0\u202f'’-]*$/u.exec(text.slice(Math.max(0, index - 40), index));
+  const m = /([\p{L}]+)[\s\u00a0\u202f'’»”"-]*$/u.exec(text.slice(Math.max(0, index - 40), index));
   return m ? m[1].toLowerCase() : '';
+}
+
+/** Length-preserving mask of quoted spans, so offsets stay valid. */
+function maskQuotes(text: string): string {
+  // A straight quote right after a digit or letter is an inch mark or a closing quote, not an opener.
+  return text.replace(/«[^»]*»|“[^”]*”|(?<![\d\p{L}])"[^"\n]*"/gu, (m) => ' '.repeat(m.length));
 }
 
 function findForms(text: string, re: RegExp, form: VoiceFr): VoiceHitFr[] {
@@ -71,6 +80,7 @@ function findForms(text: string, re: RegExp, form: VoiceFr): VoiceHitFr[] {
       const prev = previousWord(text, index);
       if (/^tien/.test(lower) && !ARTICLES_FOR_TIEN.has(prev)) continue;
       if (lower === 'ton' && DETERMINERS_BEFORE_NOUN_TON.has(prev) && prev !== 'ton') continue;
+      if (lower === 'tu' && text[index - 1] !== '-' && ETRE_BEFORE_PARTICIPLE_TU.has(prev)) continue;
     }
     hits.push({ index, word: lower, form });
   }
@@ -88,16 +98,14 @@ function top(hits: VoiceHitFr[]): Array<{ word: string; count: number }> {
 
 export function analyzeVoiceFr(text: string, expected: VoiceFr = 'vous'): VoiceReportFr {
   const prose = stripNonProse(text);
-  // Length-preserving mask of « quoted » spans, so offsets stay valid.
-  const unquoted = prose.replace(/«[^»]*»/g, (m) => ' '.repeat(m.length));
+  const unquoted = maskQuotes(prose);
   const all = [
     ...findForms(prose, TU_RE, 'tu'),
     ...findForms(prose, VOUS_RE, 'vous'),
   ];
-  const own = [
-    ...findForms(unquoted, TU_RE, 'tu'),
-    ...findForms(unquoted, VOUS_RE, 'vous'),
-  ].sort((a, b) => a.index - b.index);
+  // Decide on the full text (so a quoted word still counts as the previous
+  // word), then drop the hits that lie inside a masked quotation.
+  const own = all.filter((h) => unquoted[h.index] !== ' ').sort((a, b) => a.index - b.index);
   const tu = own.filter((h) => h.form === 'tu');
   const vous = own.filter((h) => h.form === 'vous');
   return {

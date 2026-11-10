@@ -16,8 +16,9 @@
  * Detection heuristic per sentence:
  *   wordt/worden/word/werd/werden + VBpe word later in the sentence = word-passive
  *   (high confidence); is/zijn/ben/bent/was/waren + VBpe within 3 tokens =
- *   zijn-passive (low confidence: ambiguity with perfect tense); a following
- *   "door"/"van" agent reinforces the hit.
+ *   zijn-passive (low confidence: ambiguity with perfect tense; participles
+ *   of verbs that only take zijn, such as gebleven or gestegen, are skipped);
+ *   a following "door"/"van" agent reinforces the hit.
  */
 
 import { hunspellBlocks, type HunspellLang } from './hunspell.js';
@@ -38,6 +39,15 @@ const WORD_AUX = new Set(['wordt', 'worden', 'word', 'werd', 'werden']);
 const ZIJN_AUX = new Set(['is', 'zijn', 'ben', 'bent', 'was', 'waren']);
 const ZIJN_WINDOW = 3;
 
+// Participles of verbs that have no passive and form their perfect tense
+// with zijn ("is gebleven", "zijn gestegen", "is aangekomen"): after a zijn
+// form they are an active perfect, never a passive. Also matched as the tail
+// of a separable compound (aangekomen, toegenomen, uitgegroeid). Verbs that
+// are also transitive (veranderd, gestopt, gebroken, afgenomen) stay flagged,
+// and so do transitive compounds of these tails (nagekomen, aangevallen).
+const ZIJN_PERFECT_RE =
+  /(?:(?<!na|tegemoet)gekomen|gegaan|gebleven|geweest|geworden|gebeurd|begonnen|gestegen|gedaald|gegroeid|gekrompen|gestorven|overleden|(?<!aan)gevallen|bevallen|geland|ontsnapt|geslaagd|gelukt|mislukt|verdwenen|verschenen|ontstaan|gebleken|toegenomen|vertrokken|verhuisd|gezakt|geëindigd|verstreken|verlopen|gevlucht|geschied)$/;
+
 /**
  * Morphological analysis for unique words via one `hunspell -m` batch.
  * Returns a map word -> info: ts: tags, fl: affix flags, all st: stems, and
@@ -57,7 +67,9 @@ export interface MorphInfo {
 
 export async function hunspellMorph(words: string[], lang: HunspellLang = 'nl'): Promise<Map<string, MorphInfo>> {
   const result = new Map<string, MorphInfo>();
-  const unique = [...new Set(words.filter((w) => w.length > 0 && !/[-\s]/.test(w)))];
+  // Letters and apostrophes only: hunspell prints no block for a symbol or a
+  // dotted abbreviation, which would break the block count for the whole batch.
+  const unique = [...new Set(words.filter((w) => /^\p{L}[\p{L}\p{M}'’]*$/u.test(w)))];
   if (unique.length === 0) return result;
   const blocks = await hunspellBlocks(unique, lang, '-m');
   for (let i = 0; i < unique.length; i++) {
@@ -146,7 +158,8 @@ export async function detectPassives(sentences: Sentence[]): Promise<PassiveHit[
   const hits: PassiveHit[] = [];
 
   for (const s of sentences) {
-    const words = s.words;
+    // One-letter words (u, à) must not use up the short zijn window: "is u al gemeld".
+    const words = s.words.filter((x) => x.clean.length > 1);
     for (let i = 0; i < words.length; i++) {
       const w = words[i].clean;
       const isWordAux = WORD_AUX.has(w);
@@ -163,6 +176,7 @@ export async function detectPassives(sentences: Sentence[]): Promise<PassiveHit[
       for (let j = i + 1; j <= Math.min(i + win, words.length - 1); j++) {
         const next = words[j].clean;
         if (WORD_AUX.has(next) || ZIJN_AUX.has(next)) continue; // chained aux
+        if (isZijnAux && ZIJN_PERFECT_RE.test(next)) break; // active perfect
         if (isPastParticiple(next, morph.get(next))) {
           participle = words[j].raw;
           pIndex = j;
